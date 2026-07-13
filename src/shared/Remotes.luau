@@ -1,0 +1,51 @@
+--[[
+	Remotes — creates (on the server) or finds (on the client) every
+	RemoteEvent/RemoteFunction the game uses.
+
+	The remotes live as children of THIS ModuleScript (a separate folder
+	would collide with this module's own name in ReplicatedStorage — that
+	bug cost us an afternoon in slice 1).
+
+	SECURITY NOTE: remotes are just phone lines. The SERVER decides what
+	actually happens when a request arrives.
+]]
+
+local RunService = game:GetService("RunService")
+
+-- name -> class. Add new remotes here and both sides pick them up.
+local DEFINITIONS = {
+	-- client -> server requests (server validates everything)
+	GetState = "RemoteFunction", -- full state snapshot once, on join
+	StartHatch = "RemoteFunction", -- "put one of my <egg type> into a hatch slot"
+	BuyLuckBoost = "RemoteFunction", -- "buy a luck boost"
+	BuyUpgrade = "RemoteFunction", -- "buy the next level of <upgrade key>"
+
+	-- server -> client pushes (client just renders these)
+	StateUpdate = "RemoteEvent", -- coins / income / luck every tick
+	CollectionUpdate = "RemoteEvent", -- full pet collection when it changes
+	EggInventoryUpdate = "RemoteEvent", -- carried eggs + capacity when they change
+	UpgradesUpdate = "RemoteEvent", -- upgrade levels when they change
+	HatchComplete = "RemoteEvent", -- a hatch finished: play the reveal
+	Notify = "RemoteEvent", -- small toast messages ("+1 Forest Egg")
+	MythicAnnounce = "RemoteEvent", -- server-wide: a Mythic Egg spawned!
+}
+
+local Remotes = {}
+
+if RunService:IsServer() then
+	-- Server: create each remote as a child of this ModuleScript.
+	-- Children of a ModuleScript in ReplicatedStorage replicate to clients.
+	for name, className in DEFINITIONS do
+		local remote = Instance.new(className)
+		remote.Name = name
+		remote.Parent = script
+		Remotes[name] = remote
+	end
+else
+	-- Client: wait for the server-made remotes to replicate.
+	for name in DEFINITIONS do
+		Remotes[name] = script:WaitForChild(name)
+	end
+end
+
+return Remotes
