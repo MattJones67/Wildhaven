@@ -102,6 +102,12 @@ local function defaultData(): PlayerData
 		GoalIndex = 1,
 		Stats = {},
 		LastSeenAt = 0,
+		-- patch 4:
+		Sanctuary = { Biome = "Forest", PlotIndex = 0, Objects = {}, PlacedPets = {} },
+		Class = "", -- empty until the first class roll
+		ClassTokens = 0, -- free class rolls earned from quests
+		LastClassRollAt = 0, -- os.time() of last FREE roll (24h cooldown)
+		Quests = { Progress = {}, Completed = {}, DailyDoneAt = {} },
 	}
 end
 

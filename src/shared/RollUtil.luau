@@ -47,23 +47,24 @@ function RollUtil.rollPetFromEgg(eggName: string, luck: number, rng: Random?): s
 	return egg.Pool[#egg.Pool].Pet -- float rounding edge case: rarest wins
 end
 
--- Which egg type should spawn in the world next? (luck does NOT apply here —
--- world spawns are the same for everyone; luck helps what's INSIDE your egg.)
-function RollUtil.rollEggType(rng: Random?): string
+-- Which egg type should spawn next, from a specific list (each biome has
+-- its own egg list — see GameConfig.Biomes)? Luck does NOT apply here:
+-- world spawns are the same for everyone; luck helps what's INSIDE.
+function RollUtil.rollEggTypeFrom(eggNames: { string }, rng: Random?): string
 	local random = rng or Random.new()
 	local totalWeight = 0
-	for _, egg in GameConfig.Eggs do
-		totalWeight += egg.SpawnWeight
+	for _, name in eggNames do
+		totalWeight += GameConfig.EggByName[name].SpawnWeight
 	end
 	local ticket = random:NextNumber() * totalWeight
 	local runningTotal = 0
-	for _, egg in GameConfig.Eggs do
-		runningTotal += egg.SpawnWeight
+	for _, name in eggNames do
+		runningTotal += GameConfig.EggByName[name].SpawnWeight
 		if ticket <= runningTotal then
-			return egg.Name
+			return name
 		end
 	end
-	return GameConfig.Eggs[#GameConfig.Eggs].Name
+	return eggNames[#eggNames]
 end
 
 -- Independent mutation roll, rarest-first. Returns "None" for no mutation.

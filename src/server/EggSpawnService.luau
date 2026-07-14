@@ -1,18 +1,17 @@
 --[[
-	EggSpawnService — owns every egg lying around the island.
+	EggSpawnService — owns every egg lying around the world.
 
-	Loop: keep up to MaxWorldEggs alive. Every SpawnIntervalSeconds, if
-	there's room, roll an egg type (rarity-weighted), pick a free spawn
-	point (from ForestGenerator's curated list), and place an egg there
-	with a ProximityPrompt. Mythic Eggs get announced server-wide.
+	Patch 4: spawning is PER-BIOME. Each biome keeps its own egg population
+	(biome.MaxWorldEggs) drawn from its own egg list (biome.Eggs), at spawn
+	points curated by its generator. The Desert only ever grows Sand Eggs.
 
 	Collection is fully server-validated:
 	  * ProximityPrompt.Triggered already fires ON THE SERVER
 	  * we still re-check distance (a hacked client can fire prompts remotely)
 	  * rate limit per player
-	  * inventory capacity check (EggCapacity upgrade)
-	Collected eggs go into data.EggInventory; the world slot frees up and
-	the loop will spawn a replacement somewhere else.
+	  * inventory capacity check (upgrades + rebirth bonus)
+	Collected eggs go into data.EggInventory; the slot frees up and the loop
+	spawns a replacement somewhere else in that biome.
 ]]
 
 local Players = game:GetService("Players")
@@ -24,8 +23,8 @@ local GameConfig = require(ReplicatedStorage.GameConfig)
 local Remotes = require(ReplicatedStorage.Remotes)
 local RollUtil = require(ReplicatedStorage.RollUtil)
 
+local BiomeGenerator = require(script.Parent.BiomeGenerator)
 local DataService = require(script.Parent.DataService)
-local ForestGenerator = require(script.Parent.ForestGenerator)
 local GoalService = require(script.Parent.GoalService)
 local PlayerStats = require(script.Parent.PlayerStats)
 
@@ -33,12 +32,19 @@ local SPAWNING = GameConfig.EggSpawning
 
 local EggSpawnService = {}
 
-type WorldEgg = { Model: Model, EggType: string, PointIndex: number }
+type WorldEgg = { Model: Model, EggType: string, Biome: string, PointIndex: number }
 
 local worldEggs: { [Model]: WorldEgg } = {}
-local worldEggCount = 0
-local occupiedPoints: { [number]: boolean } = {}
+local biomeEggCount: { [string]: number } = {}
+local occupiedPoints: { [string]: { [number]: boolean } } = {}
 local lastCollectAt: { [Player]: number } = {}
+
+-- QuestService plugs in here (Part 4) to count egg pickups toward quests
+-- without a circular require.
+local collectedCallback: ((Player, string) -> ())? = nil
+function EggSpawnService.setCollectedCallback(callback: (Player, string) -> ())
+	collectedCallback = callback
+end
 
 -- Tell one player their carried-egg situation changed (UI + optional toast)
 function EggSpawnService.pushInventory(player: Player)
@@ -71,8 +77,7 @@ local function onPromptTriggered(worldEgg: WorldEgg, player: Player)
 		return
 	end
 
-	-- SECURITY CHECK 3: player must genuinely be near the egg — exploited
-	-- clients can fire prompts from across the map
+	-- SECURITY CHECK 3: player must genuinely be near the egg
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then
@@ -94,26 +99,29 @@ local function onPromptTriggered(worldEgg: WorldEgg, player: Player)
 	table.insert(data.EggInventory, worldEgg.EggType)
 
 	worldEggs[worldEgg.Model] = nil
-	occupiedPoints[worldEgg.PointIndex] = nil
-	worldEggCount -= 1
+	occupiedPoints[worldEgg.Biome][worldEgg.PointIndex] = nil
+	biomeEggCount[worldEgg.Biome] -= 1
 	worldEgg.Model:Destroy()
 
 	EggSpawnService.pushInventory(player)
 	Remotes.Notify:FireClient(player, { Text = "+1 " .. worldEgg.EggType, Kind = "Pickup", EggType = worldEgg.EggType })
 	GoalService.bump(player, "EggsCollected")
+	if collectedCallback then
+		collectedCallback(player, worldEgg.EggType)
+	end
 end
 
-local function spawnOneEgg(rng: Random)
-	local points = ForestGenerator.getEggSpawnPoints()
+local function spawnOneEgg(biome, rng: Random)
+	local points = BiomeGenerator.getEggSpawnPoints(biome.Name)
 	if #points == 0 then
 		return
 	end
 
-	-- Pick a free spawn point (a few tries, then give up until next tick)
+	local taken = occupiedPoints[biome.Name]
 	local pointIndex
 	for _ = 1, 12 do
 		local candidate = rng:NextInteger(1, #points)
-		if not occupiedPoints[candidate] then
+		if not taken[candidate] then
 			pointIndex = candidate
 			break
 		end
@@ -122,18 +130,18 @@ local function spawnOneEgg(rng: Random)
 		return
 	end
 
-	local eggType = RollUtil.rollEggType(rng)
-	-- The big glowing beacon version — visible across the island
+	-- This biome's own egg table (rarity-weighted within the biome)
+	local eggType = RollUtil.rollEggTypeFrom(biome.Eggs, rng)
 	local model = EggModels.createWorldEgg(eggType)
 	model:PivotTo(CFrame.new(points[pointIndex]) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0))
-	CollectionService:AddTag(model, "WorldEgg") -- client floats/bobs/spins tagged eggs
+	CollectionService:AddTag(model, "WorldEgg")
 
-	local worldEgg: WorldEgg = { Model = model, EggType = eggType, PointIndex = pointIndex }
+	local worldEgg: WorldEgg = { Model = model, EggType = eggType, Biome = biome.Name, PointIndex = pointIndex }
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Pick Up"
 	prompt.ObjectText = eggType
-	prompt.HoldDuration = 0 -- instant tap; mobile-friendly
+	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = 9
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = model.PrimaryPart
@@ -141,12 +149,11 @@ local function spawnOneEgg(rng: Random)
 		onPromptTriggered(worldEgg, player)
 	end)
 
-	occupiedPoints[pointIndex] = true
+	taken[pointIndex] = true
 	worldEggs[model] = worldEgg
-	worldEggCount += 1
+	biomeEggCount[biome.Name] += 1
 	model.Parent = workspace
 
-	-- A Mythic Egg appearing is a server-wide event
 	local eggDef = GameConfig.EggByName[eggType]
 	if eggDef.Announce then
 		Remotes.MythicAnnounce:FireAllClients({ EggType = eggType, Position = points[pointIndex] })
@@ -155,16 +162,22 @@ end
 
 function EggSpawnService.init()
 	local rng = Random.new()
+	for _, biome in GameConfig.Biomes do
+		biomeEggCount[biome.Name] = 0
+		occupiedPoints[biome.Name] = {}
+	end
 
 	Players.PlayerRemoving:Connect(function(player)
 		lastCollectAt[player] = nil
 	end)
 
-	-- The spawn heartbeat: top the island up to the cap, one egg at a time
+	-- The spawn heartbeat: keep every biome topped up, one egg per tick each
 	task.spawn(function()
 		while true do
-			if worldEggCount < SPAWNING.MaxWorldEggs then
-				spawnOneEgg(rng)
+			for _, biome in GameConfig.Biomes do
+				if biomeEggCount[biome.Name] < biome.MaxWorldEggs then
+					spawnOneEgg(biome, rng)
+				end
 			end
 			task.wait(SPAWNING.SpawnIntervalSeconds)
 		end

@@ -95,8 +95,8 @@ end
 local function generateTerrain()
 	local terrain = workspace.Terrain
 
-	-- Ocean: a broad shallow water slab the island sits in
-	terrain:FillBlock(CFrame.new(0, -6, 0), Vector3.new(FOREST.BeachRadius * 2 + 400, 8, FOREST.BeachRadius * 2 + 400), Enum.Material.Water)
+	-- (The ocean itself is filled by BiomeGenerator.buildOcean() BEFORE this
+	-- runs, so every island's fills overwrite water, never the reverse.)
 
 	-- Beach ring (slightly lower), then the grass island on top
 	terrain:FillCylinder(CFrame.new(0, -4.5, 0), 8, FOREST.BeachRadius, Enum.Material.Sand)

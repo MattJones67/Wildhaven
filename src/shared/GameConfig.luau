@@ -65,19 +65,50 @@ end
 -- at the start), so each pet earns roughly 2.5x its old rate — two
 -- Commons still feel rewarding in the first minutes.
 -- ============================================================
+-- Biome = home biome: drives egg pools, the sanctuary matched-habitat
+-- bonus, and quest requirements.
 GameConfig.Animals = {
-	{ Name = "Squirrel", Rarity = "Common", IncomePerSecond = 2 },
-	{ Name = "Bunny", Rarity = "Common", IncomePerSecond = 3 },
-	{ Name = "Raccoon", Rarity = "Uncommon", IncomePerSecond = 8 },
-	{ Name = "Hedgehog", Rarity = "Uncommon", IncomePerSecond = 10 },
-	{ Name = "Fox", Rarity = "Rare", IncomePerSecond = 25 },
-	{ Name = "Boar", Rarity = "Rare", IncomePerSecond = 35 },
-	{ Name = "Wolf", Rarity = "Epic", IncomePerSecond = 90 },
-	{ Name = "Fawn", Rarity = "Epic", IncomePerSecond = 120 },
-	{ Name = "Bear", Rarity = "Legendary", IncomePerSecond = 280 },
-	{ Name = "Owl", Rarity = "Legendary", IncomePerSecond = 360 },
-	{ Name = "Golden Stag", Rarity = "Mythic", IncomePerSecond = 1000 },
-	{ Name = "Spirit Lynx", Rarity = "Mythic", IncomePerSecond = 1500 },
+	-- FOREST (the original 12)
+	{ Name = "Squirrel", Rarity = "Common", IncomePerSecond = 2, Biome = "Forest" },
+	{ Name = "Bunny", Rarity = "Common", IncomePerSecond = 3, Biome = "Forest" },
+	{ Name = "Raccoon", Rarity = "Uncommon", IncomePerSecond = 8, Biome = "Forest" },
+	{ Name = "Hedgehog", Rarity = "Uncommon", IncomePerSecond = 10, Biome = "Forest" },
+	{ Name = "Fox", Rarity = "Rare", IncomePerSecond = 25, Biome = "Forest" },
+	{ Name = "Boar", Rarity = "Rare", IncomePerSecond = 35, Biome = "Forest" },
+	{ Name = "Wolf", Rarity = "Epic", IncomePerSecond = 90, Biome = "Forest" },
+	{ Name = "Fawn", Rarity = "Epic", IncomePerSecond = 120, Biome = "Forest" },
+	{ Name = "Bear", Rarity = "Legendary", IncomePerSecond = 280, Biome = "Forest" },
+	{ Name = "Owl", Rarity = "Legendary", IncomePerSecond = 360, Biome = "Forest" },
+	{ Name = "Golden Stag", Rarity = "Mythic", IncomePerSecond = 1000, Biome = "Forest" },
+	{ Name = "Spirit Lynx", Rarity = "Mythic", IncomePerSecond = 1500, Biome = "Forest" },
+	-- DESERT (patch 4) — slightly richer than Forest, it's an unlock
+	{ Name = "Meerkat", Rarity = "Common", IncomePerSecond = 2.5, Biome = "Desert" },
+	{ Name = "Fennec Fox", Rarity = "Uncommon", IncomePerSecond = 9, Biome = "Desert" },
+	{ Name = "Scorpion", Rarity = "Rare", IncomePerSecond = 28, Biome = "Desert" },
+	{ Name = "Camel", Rarity = "Epic", IncomePerSecond = 100, Biome = "Desert" },
+	{ Name = "Sand Serpent", Rarity = "Legendary", IncomePerSecond = 300, Biome = "Desert" },
+	{ Name = "Golden Scarab", Rarity = "Mythic", IncomePerSecond = 1200, Biome = "Desert" },
+	-- TUNDRA
+	{ Name = "Arctic Hare", Rarity = "Common", IncomePerSecond = 3, Biome = "Tundra" },
+	{ Name = "Penguin", Rarity = "Uncommon", IncomePerSecond = 11, Biome = "Tundra" },
+	{ Name = "Snow Fox", Rarity = "Rare", IncomePerSecond = 30, Biome = "Tundra" },
+	{ Name = "Polar Bear", Rarity = "Epic", IncomePerSecond = 110, Biome = "Tundra" },
+	{ Name = "Frost Wolf", Rarity = "Legendary", IncomePerSecond = 330, Biome = "Tundra" },
+	{ Name = "Ancient Mammoth", Rarity = "Mythic", IncomePerSecond = 1300, Biome = "Tundra" },
+	-- VOLCANIC
+	{ Name = "Ember Lizard", Rarity = "Common", IncomePerSecond = 3.5, Biome = "Volcanic" },
+	{ Name = "Magma Crab", Rarity = "Uncommon", IncomePerSecond = 12, Biome = "Volcanic" },
+	{ Name = "Ash Hound", Rarity = "Rare", IncomePerSecond = 34, Biome = "Volcanic" },
+	{ Name = "Lava Golem", Rarity = "Epic", IncomePerSecond = 125, Biome = "Volcanic" },
+	{ Name = "Phoenix Chick", Rarity = "Legendary", IncomePerSecond = 380, Biome = "Volcanic" },
+	{ Name = "Inferno Drake", Rarity = "Mythic", IncomePerSecond = 1500, Biome = "Volcanic" },
+	-- SKY ISLES
+	{ Name = "Cloud Bunny", Rarity = "Common", IncomePerSecond = 4, Biome = "Sky" },
+	{ Name = "Sky Sparrow", Rarity = "Uncommon", IncomePerSecond = 14, Biome = "Sky" },
+	{ Name = "Griffin Cub", Rarity = "Rare", IncomePerSecond = 38, Biome = "Sky" },
+	{ Name = "Pegasus Foal", Rarity = "Epic", IncomePerSecond = 140, Biome = "Sky" },
+	{ Name = "Storm Eagle", Rarity = "Legendary", IncomePerSecond = 420, Biome = "Sky" },
+	{ Name = "Celestial Roc", Rarity = "Mythic", IncomePerSecond = 1800, Biome = "Sky" },
 }
 
 GameConfig.AnimalByName = {}
@@ -161,6 +192,72 @@ GameConfig.Eggs = {
 			{ Pet = "Spirit Lynx", Weight = 4 },
 		},
 	},
+	-- PATCH 4: one signature egg per new biome, full rarity ladder inside.
+	-- (SpawnWeight only competes within the SAME biome's egg list.)
+	{
+		Name = "Sand Egg",
+		SpawnWeight = 100,
+		Color = Color3.fromRGB(235, 205, 140),
+		GlowIntensity = 1.5,
+		HatchSeconds = 35,
+		Announce = false,
+		Pool = {
+			{ Pet = "Meerkat", Weight = 40 },
+			{ Pet = "Fennec Fox", Weight = 28 },
+			{ Pet = "Scorpion", Weight = 16 },
+			{ Pet = "Camel", Weight = 10 },
+			{ Pet = "Sand Serpent", Weight = 4.5 },
+			{ Pet = "Golden Scarab", Weight = 1.5 },
+		},
+	},
+	{
+		Name = "Frost Egg",
+		SpawnWeight = 100,
+		Color = Color3.fromRGB(175, 220, 245),
+		GlowIntensity = 1.5,
+		HatchSeconds = 45,
+		Announce = false,
+		Pool = {
+			{ Pet = "Arctic Hare", Weight = 40 },
+			{ Pet = "Penguin", Weight = 28 },
+			{ Pet = "Snow Fox", Weight = 16 },
+			{ Pet = "Polar Bear", Weight = 10 },
+			{ Pet = "Frost Wolf", Weight = 4.5 },
+			{ Pet = "Ancient Mammoth", Weight = 1.5 },
+		},
+	},
+	{
+		Name = "Ember Egg",
+		SpawnWeight = 100,
+		Color = Color3.fromRGB(240, 120, 70),
+		GlowIntensity = 2,
+		HatchSeconds = 60,
+		Announce = false,
+		Pool = {
+			{ Pet = "Ember Lizard", Weight = 40 },
+			{ Pet = "Magma Crab", Weight = 28 },
+			{ Pet = "Ash Hound", Weight = 16 },
+			{ Pet = "Lava Golem", Weight = 10 },
+			{ Pet = "Phoenix Chick", Weight = 4.5 },
+			{ Pet = "Inferno Drake", Weight = 1.5 },
+		},
+	},
+	{
+		Name = "Sky Egg",
+		SpawnWeight = 100,
+		Color = Color3.fromRGB(200, 225, 255),
+		GlowIntensity = 2.2,
+		HatchSeconds = 75,
+		Announce = false,
+		Pool = {
+			{ Pet = "Cloud Bunny", Weight = 40 },
+			{ Pet = "Sky Sparrow", Weight = 28 },
+			{ Pet = "Griffin Cub", Weight = 16 },
+			{ Pet = "Pegasus Foal", Weight = 10 },
+			{ Pet = "Storm Eagle", Weight = 4.5 },
+			{ Pet = "Celestial Roc", Weight = 1.5 },
+		},
+	},
 }
 
 GameConfig.EggByName = {}
@@ -172,8 +269,8 @@ end
 -- WORLD EGG SPAWNING
 -- ============================================================
 GameConfig.EggSpawning = {
-	MaxWorldEggs = 12, -- concurrent eggs on the island
-	SpawnIntervalSeconds = 5, -- how often the server tries to fill an empty slot
+	-- (Per-biome egg caps live on each entry in GameConfig.Biomes.)
+	SpawnIntervalSeconds = 5, -- how often the server tries to fill empty slots
 	PickupMaxDistance = 12, -- SECURITY: server rejects pickups from further away
 }
 
@@ -266,6 +363,22 @@ GameConfig.BaseUpgrades = {
 		Describe = "%s equip slots",
 		Values = { 2, 3, 4, 5 }, -- equipped-pet slots (rebirth unlocks add MORE on top)
 		Prices = { 0, 2500, 20000, 100000 },
+	},
+	{
+		Key = "SanctuarySize",
+		Title = "Sanctuary Deed",
+		Kind = "Functional",
+		Describe = "%s build objects",
+		Values = { 20, 30, 45, 60 }, -- max placed sanctuary objects (performance cap)
+		Prices = { 0, 1000, 10000, 50000 },
+	},
+	{
+		Key = "SanctuaryPets",
+		Title = "Habitat Care",
+		Kind = "Functional",
+		Describe = "%s placed pets",
+		Values = { 4, 6, 8, 12 }, -- pets placeable into sanctuary habitats
+		Prices = { 0, 2000, 15000, 80000 },
 	},
 	{
 		Key = "BaseTier",
@@ -427,8 +540,220 @@ GameConfig.WorldEggVisual = {
 	HaloHeight = 4.6, -- the spinning rarity ring floats this high
 }
 
--- TODO (future slices): free-build sanctuary zones plug in here as new
--- config tables — see init.server for the service hooks.
+-- ============================================================
+-- BIOMES (patch 4). Each is its own island. The PLOT PERK applies to a
+-- player GLOBALLY while their sanctuary sits in that biome — choosing
+-- where to live is a strategic decision (luck vs income vs hatch speed).
+--
+-- Gate: what unlocks travel. Checked live against saved stats, so no
+-- extra save field is needed: { Rebirths = n } and/or { TotalEarned = n }.
+-- Perk multipliers: Income/Luck multiply; HatchSpeed multiplies hatch
+-- TIME (0.9 = 10% faster).
+-- ============================================================
+GameConfig.Biomes = {
+	{
+		Name = "Forest",
+		Center = Vector3.new(0, 0, 0), -- already generated by ForestGenerator
+		Color = Color3.fromRGB(95, 170, 90),
+		Emoji = "🌲",
+		Gate = {}, -- always open
+		GateText = "Open to everyone",
+		Perk = { HatchSpeed = 0.9 },
+		PerkText = "Plot perk: 10% faster hatches",
+		Eggs = { "Forest Egg", "Mossy Egg", "Ancient Egg", "Mythic Egg" },
+		MaxWorldEggs = 10,
+	},
+	{
+		Name = "Desert",
+		Center = Vector3.new(620, 0, 0),
+		Color = Color3.fromRGB(230, 195, 120),
+		Emoji = "🏜️",
+		Gate = { TotalEarned = 10000 },
+		GateText = "Earn 10,000 lifetime 🪙",
+		Perk = { Income = 1.2 },
+		PerkText = "Plot perk: +20% income",
+		Eggs = { "Sand Egg" },
+		MaxWorldEggs = 6,
+	},
+	{
+		Name = "Tundra",
+		Center = Vector3.new(-620, 0, 0),
+		Color = Color3.fromRGB(190, 225, 240),
+		Emoji = "❄️",
+		Gate = { Rebirths = 1 },
+		GateText = "Reach Rebirth 1",
+		Perk = { Luck = 1.2 },
+		PerkText = "Plot perk: +20% luck",
+		Eggs = { "Frost Egg" },
+		MaxWorldEggs = 6,
+	},
+	{
+		Name = "Volcanic",
+		Center = Vector3.new(0, 0, 620),
+		Color = Color3.fromRGB(215, 95, 60),
+		Emoji = "🌋",
+		Gate = { Rebirths = 2 },
+		GateText = "Reach Rebirth 2",
+		Perk = { Income = 1.6 },
+		PerkText = "Plot perk: +60% income",
+		Eggs = { "Ember Egg" },
+		MaxWorldEggs = 6,
+	},
+	{
+		Name = "Sky",
+		Center = Vector3.new(0, 150, -620),
+		Color = Color3.fromRGB(180, 205, 255),
+		Emoji = "☁️",
+		Gate = { Rebirths = 3 },
+		GateText = "Reach Rebirth 3",
+		-- (The pitch says "faster XP" but there is no XP system yet, so the
+		-- celestial perk is luck+income until leveling exists.)
+		Perk = { Luck = 1.15, Income = 1.15 },
+		PerkText = "Plot perk: +15% luck AND +15% income",
+		Eggs = { "Sky Egg" },
+		MaxWorldEggs = 6,
+	},
+}
+
+GameConfig.BiomeByName = {}
+for _, biome in GameConfig.Biomes do
+	GameConfig.BiomeByName[biome.Name] = biome
+end
+
+-- ============================================================
+-- FREE-BUILD SANCTUARY (patch 4). The player's own decorated plot in a
+-- chosen biome. Placed pets earn income ON TOP of equipped pets.
+-- ============================================================
+GameConfig.Sanctuary = {
+	PlotHalfSize = 26, -- placements valid within ±this many studs of plot center
+	PlotsPerBiome = 4, -- claimable sanctuary pads per biome island
+	GridSnap = 2, -- placement snaps to this grid (0 = free placement)
+	HabitatCapacity = 2, -- pets one enclosure can hold
+	MatchedHabitatBonus = 1.25, -- pet income x this when habitat biome matches pet
+	ThemeBonus = { MinSameBiomeObjects = 4, Mult = 1.1 }, -- cohesive-theme reward
+	MoveRateLimit = 0.2, -- min seconds between build actions (anti-spam)
+}
+
+-- The placement palette. Habitats have a Biome (drives the matched bonus);
+-- terrain/decor with a Biome count toward the theme bonus for that biome.
+GameConfig.SanctuaryObjects = {
+	-- Terrain
+	{ Key = "GrassTile", Title = "Grass Patch", Category = "Terrain", Biome = "Forest" },
+	{ Key = "SandTile", Title = "Sand Patch", Category = "Terrain", Biome = "Desert" },
+	{ Key = "SnowTile", Title = "Snow Patch", Category = "Terrain", Biome = "Tundra" },
+	{ Key = "PathTile", Title = "Stone Path", Category = "Terrain" },
+	{ Key = "WaterTile", Title = "Pond Tile", Category = "Terrain" },
+	{ Key = "Hill", Title = "Small Hill", Category = "Terrain" },
+	-- Habitats (one per biome)
+	{ Key = "ForestPen", Title = "Forest Pen", Category = "Habitat", Biome = "Forest" },
+	{ Key = "DesertPen", Title = "Desert Pen", Category = "Habitat", Biome = "Desert" },
+	{ Key = "TundraPen", Title = "Tundra Pen", Category = "Habitat", Biome = "Tundra" },
+	{ Key = "VolcanicPen", Title = "Volcanic Pen", Category = "Habitat", Biome = "Volcanic" },
+	{ Key = "SkyPen", Title = "Sky Pen", Category = "Habitat", Biome = "Sky" },
+	-- Decor
+	{ Key = "TreeProp", Title = "Tree", Category = "Decor", Biome = "Forest" },
+	{ Key = "CactusProp", Title = "Cactus", Category = "Decor", Biome = "Desert" },
+	{ Key = "IceSpike", Title = "Ice Spike", Category = "Decor", Biome = "Tundra" },
+	{ Key = "EmberRock", Title = "Ember Rock", Category = "Decor", Biome = "Volcanic" },
+	{ Key = "CloudPuff", Title = "Cloud Puff", Category = "Decor", Biome = "Sky" },
+	{ Key = "RockProp", Title = "Boulder", Category = "Decor" },
+	{ Key = "Fence", Title = "Fence", Category = "Decor" },
+	{ Key = "Bench", Title = "Bench", Category = "Decor" },
+	{ Key = "LanternProp", Title = "Lantern", Category = "Decor" },
+	{ Key = "SignProp", Title = "Sign", Category = "Decor" },
+	{ Key = "Arch", Title = "Arch", Category = "Decor" },
+}
+
+GameConfig.SanctuaryObjectByKey = {}
+for _, object in GameConfig.SanctuaryObjects do
+	GameConfig.SanctuaryObjectByKey[object.Key] = object
+end
+
+-- ============================================================
+-- CLASSES (patch 4). Rolled rarity-weighted; perks are marginal
+-- multipliers (meaningful, not game-breaking). MutationChance multiplies
+-- mutation odds on top of luck.
+-- First roll is FREE, one free roll every 24h, extra re-rolls cost coins.
+-- TODO(monetisation): paid Robux re-roll hooks into ClassService later.
+-- ============================================================
+GameConfig.Classes = {
+	List = {
+		{ Name = "Forager", Weight = 26, Tier = "Common", Color = Color3.fromRGB(180, 210, 150), Perks = { Income = 1.05 }, Blurb = "+5% income" },
+		{ Name = "Swift", Weight = 26, Tier = "Common", Color = Color3.fromRGB(160, 200, 230), Perks = { HatchSpeed = 0.95 }, Blurb = "5% faster hatches" },
+		{ Name = "Lucky", Weight = 24, Tier = "Common", Color = Color3.fromRGB(150, 220, 160), Perks = { Luck = 1.05 }, Blurb = "+5% luck" },
+		{ Name = "Merchant", Weight = 8, Tier = "Rare", Color = Color3.fromRGB(255, 205, 100), Perks = { Income = 1.12 }, Blurb = "+12% income" },
+		{ Name = "Tempest", Weight = 7, Tier = "Rare", Color = Color3.fromRGB(140, 170, 255), Perks = { HatchSpeed = 0.9, Income = 1.05 }, Blurb = "10% faster hatches, +5% income" },
+		{ Name = "Fortune", Weight = 7, Tier = "Rare", Color = Color3.fromRGB(120, 230, 190), Perks = { Luck = 1.12 }, Blurb = "+12% luck" },
+		{ Name = "Angel", Weight = 1, Tier = "Chase", Color = Color3.fromRGB(255, 250, 200), Perks = { Luck = 1.25, HatchSpeed = 0.85 }, Blurb = "+25% luck, 15% faster hatches ✨" },
+		{ Name = "Demon", Weight = 1, Tier = "Chase", Color = Color3.fromRGB(255, 90, 90), Perks = { Income = 1.25, MutationChance = 1.1 }, Blurb = "+25% income, +10% mutation odds 🔥" },
+	},
+	RerollCost = 750, -- coins for an extra roll beyond the free daily one
+	FreeRollCooldownSeconds = 24 * 3600,
+}
+
+GameConfig.ClassByName = {}
+for _, class in GameConfig.Classes.List do
+	GameConfig.ClassByName[class.Name] = class
+end
+
+-- ============================================================
+-- GUIDE NPC QUESTS (patch 4). One-time CHAIN per biome (in order) plus a
+-- repeatable DAILY per biome. Types:
+--   CollectEgg  — pick up Count eggs of type Param (progress counted live)
+--   HatchPet    — hatch Count pets from biome Param at rarity >= MinRarity
+-- Rewards: Coins / LuckBoost / ClassToken (a free class roll) / Pet (name).
+-- TODO(later patch): "Discover the hidden ruins" secret-area quests hook
+-- in here as a third type once secret areas exist.
+-- ============================================================
+GameConfig.Quests = {
+	Chains = {
+		Forest = {
+			{ Id = "forest1", Text = "Collect 3 Forest Eggs", Type = "CollectEgg", Param = "Forest Egg", Count = 3, Reward = { Coins = 200 } },
+			{ Id = "forest2", Text = "Hatch an Uncommon or better", Type = "HatchPet", Param = "Any", MinRarity = 2, Count = 1, Reward = { LuckBoost = true } },
+			{ Id = "forest3", Text = "Collect 2 Mossy Eggs", Type = "CollectEgg", Param = "Mossy Egg", Count = 2, Reward = { Coins = 500 } },
+		},
+		Desert = {
+			{ Id = "desert1", Text = "Collect 3 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 3, Reward = { Coins = 400 } },
+			{ Id = "desert2", Text = "Hatch a Desert Rare or better", Type = "HatchPet", Param = "Desert", MinRarity = 3, Count = 1, Reward = { ClassToken = 1 } },
+			{ Id = "desert3", Text = "Collect 5 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 5, Reward = { Pet = "Fennec Fox" } },
+		},
+		Tundra = {
+			{ Id = "tundra1", Text = "Collect 3 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 3, Reward = { Coins = 800 } },
+			{ Id = "tundra2", Text = "Hatch a Tundra Rare or better", Type = "HatchPet", Param = "Tundra", MinRarity = 3, Count = 1, Reward = { LuckBoost = true } },
+			{ Id = "tundra3", Text = "Collect 5 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 5, Reward = { Coins = 2000 } },
+		},
+		Volcanic = {
+			{ Id = "volcanic1", Text = "Collect 3 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 3, Reward = { Coins = 1500 } },
+			{ Id = "volcanic2", Text = "Hatch a Volcanic Epic or better", Type = "HatchPet", Param = "Volcanic", MinRarity = 4, Count = 1, Reward = { ClassToken = 1 } },
+			{ Id = "volcanic3", Text = "Collect 5 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 5, Reward = { Coins = 5000 } },
+		},
+		Sky = {
+			{ Id = "sky1", Text = "Collect 3 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 3, Reward = { Coins = 3000 } },
+			{ Id = "sky2", Text = "Hatch a Sky Epic or better", Type = "HatchPet", Param = "Sky", MinRarity = 4, Count = 1, Reward = { LuckBoost = true } },
+			{ Id = "sky3", Text = "Collect 5 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 5, Reward = { Pet = "Griffin Cub" } },
+		},
+	},
+	-- Repeatable dailies (per biome, 24h cooldown after turn-in)
+	Dailies = {
+		Forest = { Id = "dailyForest", Text = "Daily: Collect 2 Forest Eggs", Type = "CollectEgg", Param = "Forest Egg", Count = 2, Reward = { Coins = 300 } },
+		Desert = { Id = "dailyDesert", Text = "Daily: Collect 2 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 2, Reward = { Coins = 600 } },
+		Tundra = { Id = "dailyTundra", Text = "Daily: Collect 2 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 2, Reward = { Coins = 1200 } },
+		Volcanic = { Id = "dailyVolcanic", Text = "Daily: Collect 2 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 2, Reward = { Coins = 2400 } },
+		Sky = { Id = "dailySky", Text = "Daily: Collect 2 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 2, Reward = { Coins = 4000 } },
+	},
+	DailyCooldownSeconds = 24 * 3600,
+}
+
+-- NPC guides: one per biome, positioned by the biome generators.
+GameConfig.Guides = {
+	Forest = { Name = "Willow", Greeting = "Welcome to the forest, friend! The eggs practically fall from the trees here." },
+	Desert = { Name = "Dune", Greeting = "Ah, a traveler! The sands hide treasures... and the occasional scorpion." },
+	Tundra = { Name = "Aurora", Greeting = "Bundle up! The rarest pets love the cold, you know." },
+	Volcanic = { Name = "Cinder", Greeting = "Careful where you step! The heat here breeds LEGENDS." },
+	Sky = { Name = "Zephyr", Greeting = "You made it up here! The clouds are full of wonders." },
+}
+
+-- TODO (future patch): visiting other players' sanctuaries (social hooks).
 
 -- ============================================================
 -- FOREST GENERATION

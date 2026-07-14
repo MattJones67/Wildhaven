@@ -34,6 +34,13 @@ local HatchService = {}
 local lastStartAt: { [Player]: number } = {}
 local slotEggModels: { [Player]: { [number]: Model } } = {}
 
+-- QuestService plugs in here (patch 4) to count hatches toward quests
+-- without a circular require. Receives (player, species, rarityOrder).
+local hatchedCallback: ((Player, string, number) -> ())? = nil
+function HatchService.setHatchedCallback(callback: (Player, string, number) -> ())
+	hatchedCallback = callback
+end
+
 -- ------------------------------------------------------------
 -- Slot egg visuals
 -- ------------------------------------------------------------
@@ -166,10 +173,11 @@ local function completeHatch(player: Player, data, hatchIndex: number)
 	local hatch = data.Hatches[hatchIndex]
 	table.remove(data.Hatches, hatchIndex)
 
-	-- THE ROLL: pet from this egg's pool + mutation + size, with total luck
+	-- THE ROLL: pet from this egg's pool + mutation + size, with total luck.
+	-- Mutations additionally honor class perks (e.g. Demon +10% mutation odds).
 	local luck = PlayerStats.getLuck(player)
 	local species = RollUtil.rollPetFromEgg(hatch.EggType, luck)
-	local mutation = RollUtil.rollMutation(luck)
+	local mutation = RollUtil.rollMutation(luck * PlayerStats.getMutationLuck(player))
 	local size = RollUtil.rollSize(luck)
 
 	local entry = { Species = species, Mutation = mutation, Size = size, Id = data.NextPetId }
@@ -192,9 +200,13 @@ local function completeHatch(player: Player, data, hatchIndex: number)
 		end
 	end
 
-	-- Goal ladder bookkeeping
+	-- Goal ladder + quest bookkeeping
+	local rarityOrder = GameConfig.RarityByName[GameConfig.AnimalByName[species].Rarity].Order
 	GoalService.bump(player, "HatchCount")
-	GoalService.raiseTo(player, "BestRarityOrder", GameConfig.RarityByName[GameConfig.AnimalByName[species].Rarity].Order)
+	GoalService.raiseTo(player, "BestRarityOrder", rarityOrder)
+	if hatchedCallback then
+		hatchedCallback(player, species, rarityOrder)
+	end
 
 	-- Where should the reveal play?
 	local pads = BaseUpgradeService.getPadPositions(player)

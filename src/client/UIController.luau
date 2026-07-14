@@ -496,6 +496,10 @@ local function buildUpgradePanel(gui: ScreenGui): Frame
 	return panel
 end
 
+-- THE single source-of-truth renderer for upgrade rows (bug fix, patch 4).
+-- It reads ONLY server-pushed state (upgradeLevels) + the live coin count,
+-- and is re-run after every purchase AND whenever coins change — so the
+-- level, price, and affordability can never go stale until a menu reopen.
 local function refreshUpgradeRows()
 	for _, upgrade in GameConfig.BaseUpgrades do
 		local refs = upgradeRowRefs[upgrade.Key]
@@ -507,9 +511,11 @@ local function refreshUpgradeRows()
 			refs.Button.Text = "MAX"
 			refs.Button.BackgroundColor3 = Color3.fromRGB(110, 120, 115)
 		else
+			local price = upgrade.Prices[level + 1]
 			refs.Effect.Text = describeValue(upgrade, level) .. " → " .. describeValue(upgrade, level + 1)
-			refs.Button.Text = comma(upgrade.Prices[level + 1]) .. " 🪙"
-			refs.Button.BackgroundColor3 = GOLD
+			refs.Button.Text = comma(price) .. " 🪙"
+			-- Affordability shown live: gold when buyable, dimmed when not
+			refs.Button.BackgroundColor3 = targetCoins >= price and GOLD or Color3.fromRGB(150, 135, 95)
 		end
 	end
 end
@@ -778,6 +784,9 @@ function UIController.setState(state: { [string]: any })
 			TweenService:Create(coinsScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 			Sounds.coinBlip()
 		end
+		-- Coins changed -> re-evaluate every price button (part of the
+		-- "always render from authoritative state" bug fix)
+		refreshUpgradeRows()
 	end
 	if state.IncomePerSecond ~= nil then
 		incomeLabel.Text = "+" .. comma(state.IncomePerSecond) .. " 🪙/s"

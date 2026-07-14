@@ -19,6 +19,8 @@ require(ReplicatedStorage.Remotes)
 
 local DataService = require(script.DataService)
 local ForestGenerator = require(script.ForestGenerator)
+local BiomeGenerator = require(script.BiomeGenerator)
+local BiomeService = require(script.BiomeService)
 local BaseUpgradeService = require(script.BaseUpgradeService)
 local GoalService = require(script.GoalService)
 local IncomeService = require(script.IncomeService)
@@ -30,7 +32,10 @@ local RebirthService = require(script.RebirthService)
 local ReturnsService = require(script.ReturnsService)
 
 DataService.init()
+BiomeGenerator.buildOcean() -- water first, islands overwrite it
 ForestGenerator.build()
+BiomeGenerator.build() -- the patch-4 islands + travel hubs + guides
+BiomeService.init()
 BaseUpgradeService.init()
 GoalService.init()
 IncomeService.init()

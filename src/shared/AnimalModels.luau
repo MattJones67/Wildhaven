@@ -396,6 +396,226 @@ builders["Spirit Lynx"] = function(model)
 end
 
 -- ------------------------------------------------------------
+-- SPEC-DRIVEN BUILDER (patch 4). The 24 biome pets are data recipes fed
+-- through one parametric critter: chunky body + oversized head + big eyes,
+-- then ears/tail/extras by keyword. Same cute DNA, far less code.
+-- ------------------------------------------------------------
+
+type CritterSpec = {
+	Color: Color3,
+	Accent: Color3?, -- belly / inner ears / secondary features
+	Body: Vector3?, -- body size (default chunky)
+	HeadScale: number?,
+	EyeScale: number?,
+	Ears: string?, -- "tall" | "round" | "pointy" | "huge" | "tuft" | "big" | "none"
+	Tail: string?, -- "bushy" | "puff" | "thin" | "flame" | "curl" | "none"
+	Extras: { string }?, -- feature keywords, see below
+	Crest: Color3?, -- neon accent color for flame/storm/frost crests
+	Metallic: boolean?,
+}
+
+local function buildFromSpec(model: Model, spec: CritterSpec)
+	local color = spec.Color
+	local accent = spec.Accent or Color3.new(
+		math.min(color.R * 1.3 + 0.15, 1), math.min(color.G * 1.3 + 0.15, 1), math.min(color.B * 1.3 + 0.15, 1))
+	local crest = spec.Crest or Color3.fromRGB(255, 170, 80)
+	local bodySize = spec.Body or Vector3.new(1.9, 1.6, 2.2)
+	local extras = {}
+	for _, keyword in spec.Extras or {} do
+		extras[keyword] = true
+	end
+
+	local legLift = extras.longlegs and 1.1 or 0
+	local bodyY = bodySize.Y / 2 + 0.15 + legLift
+	local body = ball(model, "Body", bodySize, color, CFrame.new(0, bodyY, 0.2))
+	model.PrimaryPart = body
+	if extras.belly then
+		ball(model, "Belly", bodySize * 0.62, accent, CFrame.new(0, bodyY - 0.1, 0.2 - bodySize.Z * 0.35))
+	end
+	if extras.longlegs then
+		for _, dx in { -bodySize.X * 0.3, bodySize.X * 0.3 } do
+			for _, dz in { -bodySize.Z * 0.25, bodySize.Z * 0.45 } do
+				cylinder(model, "Leg", Vector3.new(bodyY - 0.1, 0.35, 0.35), color,
+					CFrame.new(dx, (bodyY - 0.1) / 2, dz + 0.2) * CFrame.Angles(0, 0, math.rad(90)))
+			end
+		end
+	end
+
+	local headScale = spec.HeadScale or 1
+	local headSize = Vector3.new(1.6, 1.5, 1.5) * headScale
+	local headCF = CFrame.new(0, bodyY + bodySize.Y * 0.55 + headSize.Y * 0.3, -bodySize.Z * 0.3)
+	ball(model, "Head", headSize, color, headCF)
+	local headRadius = headSize.X / 2
+	addEyes(model, headCF, headRadius, spec.EyeScale or 1)
+	if extras.beak then
+		ball(model, "Beak", Vector3.new(0.3, 0.4, 0.45), Color3.fromRGB(240, 170, 60), headCF * CFrame.new(0, -0.15, -headRadius - 0.15))
+	else
+		ball(model, "Nose", Vector3.new(0.2, 0.16, 0.16), Color3.fromRGB(50, 38, 34), headCF * CFrame.new(0, -0.2, -headRadius * 0.95))
+	end
+
+	-- EARS
+	local ears = spec.Ears or "round"
+	if ears ~= "none" then
+		for _, side in { -1, 1 } do
+			local earCF = headCF * CFrame.new(side * headRadius * 0.55, headRadius * 0.9, 0.05)
+				* CFrame.Angles(0, 0, math.rad(side * 12))
+			if ears == "tall" then
+				ball(model, "Ear", Vector3.new(0.42, 1.4, 0.32), color, earCF * CFrame.new(0, 0.35, 0))
+				ball(model, "EarInner", Vector3.new(0.2, 0.9, 0.18), accent, earCF * CFrame.new(0, 0.35, -0.09))
+			elseif ears == "huge" then
+				ball(model, "Ear", Vector3.new(0.7, 1.2, 0.35), color, earCF * CFrame.new(side * 0.15, 0.3, 0))
+				ball(model, "EarInner", Vector3.new(0.4, 0.8, 0.2), accent, earCF * CFrame.new(side * 0.15, 0.3, -0.1))
+			elseif ears == "pointy" then
+				ball(model, "Ear", Vector3.new(0.45, 0.85, 0.3), color, earCF)
+			elseif ears == "tuft" then
+				ball(model, "Ear", Vector3.new(0.4, 0.6, 0.25), color, earCF)
+				local tuft = ball(model, "Tuft", Vector3.new(0.14, 0.4, 0.12), crest, earCF * CFrame.new(0, 0.4, 0))
+				tuft.Material = Enum.Material.Neon
+			elseif ears == "big" then
+				ball(model, "Ear", Vector3.new(0.9, 1, 0.3), color, earCF * CFrame.new(side * 0.3, 0.1, 0.1))
+			else -- round
+				ball(model, "Ear", Vector3.new(0.5, 0.5, 0.3), color, earCF)
+			end
+		end
+	end
+
+	-- TAIL
+	local tail = spec.Tail or "none"
+	local tailBase = CFrame.new(0, bodyY + bodySize.Y * 0.15, 0.2 + bodySize.Z * 0.55)
+	if tail == "bushy" then
+		ball(model, "TailBase", Vector3.new(0.75, 1.5, 0.75), color, tailBase * CFrame.Angles(math.rad(40), 0, 0))
+		ball(model, "TailTip", Vector3.new(0.5, 0.65, 0.5), accent, tailBase * CFrame.new(0, 0.95, 0.35))
+	elseif tail == "puff" then
+		ball(model, "Tail", Vector3.new(0.6, 0.6, 0.6), accent, tailBase)
+	elseif tail == "thin" then
+		ball(model, "Tail", Vector3.new(0.25, 1.2, 0.25), color, tailBase * CFrame.Angles(math.rad(45), 0, 0))
+	elseif tail == "flame" then
+		local flame = ball(model, "Tail", Vector3.new(0.4, 1.1, 0.4), crest, tailBase * CFrame.Angles(math.rad(35), 0, 0))
+		flame.Material = Enum.Material.Neon
+	elseif tail == "curl" then
+		for i = 0, 2 do
+			ball(model, "TailSeg", Vector3.new(0.5 - i * 0.1, 0.5 - i * 0.1, 0.5 - i * 0.1), color,
+				tailBase * CFrame.new(0, i * 0.42, i * 0.18))
+		end
+	end
+
+	-- EXTRAS (feature keywords)
+	if extras.spikes then
+		for i = 0, 2 do
+			ball(model, "Spike", Vector3.new(0.35, 0.75, 0.35), accent, CFrame.new(0, bodyY + bodySize.Y * 0.5, -0.4 + i * 0.55))
+		end
+	end
+	if extras.shell then
+		local shell = ball(model, "Shell", bodySize * Vector3.new(0.85, 0.7, 0.85), accent, CFrame.new(0, bodyY + bodySize.Y * 0.28, 0.25))
+		if spec.Metallic then
+			shell.Material = Enum.Material.Metal
+			shell.Reflectance = 0.25
+		end
+	end
+	if extras.hump then
+		ball(model, "Hump", Vector3.new(1.1, 0.9, 1.1), color, CFrame.new(0, bodyY + bodySize.Y * 0.5, 0.5))
+	end
+	if extras.tusks then
+		for _, side in { -1, 1 } do
+			ball(model, "Tusk", Vector3.new(0.18, 0.9, 0.18), Color3.fromRGB(245, 240, 225),
+				headCF * CFrame.new(side * 0.45, -0.5, -headRadius * 0.7) * CFrame.Angles(math.rad(-25), 0, math.rad(side * -15)))
+		end
+	end
+	if extras.trunk then
+		for i = 0, 2 do
+			ball(model, "Trunk", Vector3.new(0.42 - i * 0.06, 0.6, 0.42 - i * 0.06), color,
+				headCF * CFrame.new(0, -0.45 - i * 0.42, -headRadius * 0.8 - i * 0.12))
+		end
+	end
+	if extras.claws then
+		for _, side in { -1, 1 } do
+			ball(model, "Claw", Vector3.new(0.7, 0.5, 0.9), color,
+				CFrame.new(side * (bodySize.X / 2 + 0.3), bodyY - 0.2, -bodySize.Z * 0.4) * CFrame.Angles(0, math.rad(side * -20), 0))
+		end
+	end
+	if extras.wings or extras.wingsBig then
+		local wingSize = extras.wingsBig and Vector3.new(0.35, 1.4, 2.6) or Vector3.new(0.3, 1, 1.8)
+		for _, side in { -1, 1 } do
+			ball(model, "Wing", wingSize, accent,
+				CFrame.new(side * (bodySize.X / 2 + 0.25), bodyY + 0.35, 0.35) * CFrame.Angles(math.rad(-20), 0, math.rad(side * 25)))
+		end
+	end
+	if extras.mane then
+		ball(model, "Mane", Vector3.new(headSize.X * 0.6, 1.2, 0.6), accent, headCF * CFrame.new(0, 0.35, headRadius * 0.6))
+	end
+	if extras.crest then
+		for i = 0, 1 do
+			local spikePart = ball(model, "Crest", Vector3.new(0.3, 0.7 - i * 0.15, 0.3), crest,
+				CFrame.new(0, bodyY + bodySize.Y * 0.55, -0.1 + i * 0.5) * CFrame.Angles(math.rad(15), 0, 0))
+			spikePart.Material = Enum.Material.Neon
+		end
+	end
+	if extras.cloudring then
+		for i = 1, 4 do
+			local angle = (i / 4) * math.pi * 2
+			ball(model, "Cloud", Vector3.new(0.8, 0.5, 0.8), Color3.fromRGB(250, 250, 255),
+				CFrame.new(math.cos(angle) * 1.1, 0.35, 0.2 + math.sin(angle) * 1.1))
+		end
+	end
+	if extras.halo then
+		local halo = ball(model, "Halo", Vector3.new(1.1, 0.12, 1.1), crest, headCF * CFrame.new(0, headRadius + 0.6, 0))
+		halo.Material = Enum.Material.Neon
+	end
+	if extras.hood then
+		ball(model, "Hood", Vector3.new(headSize.X * 1.25, headSize.Y * 0.9, 0.5), accent, headCF * CFrame.new(0, 0.1, headRadius * 0.5))
+	end
+	if extras.lavacracks then
+		for i = 1, 3 do
+			local crack = ball(model, "Crack", Vector3.new(0.15, 0.6, bodySize.Z * 0.5), crest,
+				CFrame.new((i - 2) * bodySize.X * 0.3, bodyY, 0.2) * CFrame.Angles(0, math.rad(i * 30), 0))
+			crack.Material = Enum.Material.Neon
+		end
+	end
+	if extras.flippers then
+		for _, side in { -1, 1 } do
+			ball(model, "Flipper", Vector3.new(0.25, 1.1, 0.6), color,
+				CFrame.new(side * (bodySize.X / 2 + 0.15), bodyY - 0.1, 0.1) * CFrame.Angles(0, 0, math.rad(side * 30)))
+		end
+	end
+	if spec.Metallic then
+		body.Material = Enum.Material.Metal
+		body.Reflectance = 0.2
+	end
+end
+
+-- The biome rosters as recipes (Common -> Mythic per biome)
+local SPECS: { [string]: CritterSpec } = {
+	-- DESERT
+	["Meerkat"] = { Color = Color3.fromRGB(210, 175, 125), Body = Vector3.new(1.3, 1.8, 1.4), Ears = "round", Tail = "thin", Extras = { "belly" } },
+	["Fennec Fox"] = { Color = Color3.fromRGB(245, 222, 185), Accent = Color3.fromRGB(250, 180, 195), Ears = "huge", Tail = "bushy", EyeScale = 1.1 },
+	["Scorpion"] = { Color = Color3.fromRGB(150, 100, 55), Accent = Color3.fromRGB(110, 70, 40), Body = Vector3.new(2, 1.1, 2.4), Ears = "none", Tail = "curl", Extras = { "claws" }, HeadScale = 0.8 },
+	["Camel"] = { Color = Color3.fromRGB(205, 165, 110), Ears = "round", Tail = "thin", Extras = { "hump", "longlegs" } },
+	["Sand Serpent"] = { Color = Color3.fromRGB(190, 175, 90), Accent = Color3.fromRGB(230, 215, 140), Body = Vector3.new(1.3, 1.2, 3), Ears = "none", Tail = "thin", Extras = { "hood" }, EyeScale = 1.1 },
+	["Golden Scarab"] = { Color = Color3.fromRGB(230, 185, 70), Accent = Color3.fromRGB(255, 215, 110), Body = Vector3.new(1.8, 1.2, 2.2), Ears = "none", Tail = "none", Extras = { "shell", "wings" }, Metallic = true, HeadScale = 0.85 },
+	-- TUNDRA
+	["Arctic Hare"] = { Color = Color3.fromRGB(248, 248, 250), Accent = Color3.fromRGB(220, 230, 240), Ears = "tall", Tail = "puff" },
+	["Penguin"] = { Color = Color3.fromRGB(50, 55, 70), Accent = Color3.fromRGB(240, 240, 245), Body = Vector3.new(1.5, 2.1, 1.5), Ears = "none", Tail = "none", Extras = { "belly", "flippers", "beak" } },
+	["Snow Fox"] = { Color = Color3.fromRGB(235, 240, 248), Accent = Color3.fromRGB(200, 220, 240), Ears = "pointy", Tail = "bushy" },
+	["Polar Bear"] = { Color = Color3.fromRGB(240, 240, 238), Body = Vector3.new(2.5, 2.2, 2.6), Ears = "round", Tail = "puff", Extras = { "belly" } },
+	["Frost Wolf"] = { Color = Color3.fromRGB(175, 200, 225), Crest = Color3.fromRGB(140, 230, 255), Ears = "pointy", Tail = "bushy", Extras = { "crest" } },
+	["Ancient Mammoth"] = { Color = Color3.fromRGB(140, 100, 75), Body = Vector3.new(2.6, 2.3, 2.8), Ears = "big", Tail = "thin", Extras = { "tusks", "trunk", "longlegs" }, HeadScale = 1.1 },
+	-- VOLCANIC
+	["Ember Lizard"] = { Color = Color3.fromRGB(225, 110, 60), Crest = Color3.fromRGB(255, 180, 60), Body = Vector3.new(1.5, 1.1, 2.3), Ears = "none", Tail = "thin", Extras = { "spikes" } },
+	["Magma Crab"] = { Color = Color3.fromRGB(190, 70, 50), Accent = Color3.fromRGB(80, 55, 50), Body = Vector3.new(2.1, 1.2, 2), Ears = "none", Tail = "none", Extras = { "claws", "shell" }, HeadScale = 0.8 },
+	["Ash Hound"] = { Color = Color3.fromRGB(95, 90, 95), Crest = Color3.fromRGB(255, 140, 50), Ears = "pointy", Tail = "flame", Extras = { "crest" } },
+	["Lava Golem"] = { Color = Color3.fromRGB(60, 55, 58), Crest = Color3.fromRGB(255, 120, 40), Body = Vector3.new(2.3, 2.1, 2.2), Ears = "none", Tail = "none", Extras = { "lavacracks" }, HeadScale = 0.9 },
+	["Phoenix Chick"] = { Color = Color3.fromRGB(245, 150, 60), Accent = Color3.fromRGB(255, 205, 90), Crest = Color3.fromRGB(255, 220, 80), Body = Vector3.new(1.4, 1.5, 1.4), Ears = "tuft", Tail = "flame", Extras = { "wings", "beak", "belly" }, EyeScale = 1.15 },
+	["Inferno Drake"] = { Color = Color3.fromRGB(150, 45, 45), Accent = Color3.fromRGB(90, 30, 35), Crest = Color3.fromRGB(255, 130, 40), Body = Vector3.new(2, 1.7, 2.6), Ears = "pointy", Tail = "flame", Extras = { "wingsBig", "crest" } },
+	-- SKY ISLES
+	["Cloud Bunny"] = { Color = Color3.fromRGB(250, 250, 255), Accent = Color3.fromRGB(255, 210, 230), Ears = "tall", Tail = "puff", Extras = { "cloudring" } },
+	["Sky Sparrow"] = { Color = Color3.fromRGB(110, 160, 235), Accent = Color3.fromRGB(200, 225, 255), Body = Vector3.new(1.3, 1.3, 1.5), Ears = "none", Tail = "thin", Extras = { "wings", "beak", "belly" }, EyeScale = 1.1 },
+	["Griffin Cub"] = { Color = Color3.fromRGB(225, 185, 110), Accent = Color3.fromRGB(245, 240, 230), Ears = "tuft", Tail = "thin", Extras = { "wings", "beak" }, Crest = Color3.fromRGB(255, 235, 160) },
+	["Pegasus Foal"] = { Color = Color3.fromRGB(245, 245, 250), Accent = Color3.fromRGB(215, 195, 245), Ears = "pointy", Tail = "bushy", Extras = { "wings", "longlegs", "mane" } },
+	["Storm Eagle"] = { Color = Color3.fromRGB(80, 95, 130), Accent = Color3.fromRGB(150, 170, 210), Crest = Color3.fromRGB(150, 220, 255), Body = Vector3.new(1.8, 1.7, 2), Ears = "none", Tail = "thin", Extras = { "wingsBig", "beak", "crest" } },
+	["Celestial Roc"] = { Color = Color3.fromRGB(240, 235, 215), Accent = Color3.fromRGB(255, 220, 130), Crest = Color3.fromRGB(255, 235, 150), Body = Vector3.new(2.3, 2, 2.6), Ears = "none", Tail = "flame", Extras = { "wingsBig", "beak", "halo" } },
+}
+
+-- ------------------------------------------------------------
 -- Mutation styling
 -- ------------------------------------------------------------
 
@@ -461,8 +681,11 @@ function AnimalModels.create(species: string, mutation: string?): Model
 	model.Name = species
 
 	local builder = builders[species]
+	local spec = SPECS[species]
 	if builder then
-		builder(model)
+		builder(model) -- the original hand-crafted 12
+	elseif spec then
+		buildFromSpec(model, spec) -- the spec-driven biome roster
 	else
 		-- Unknown species (future content?): friendly fallback blob.
 		local body = ball(model, "Body", Vector3.new(2, 2, 2), Color3.fromRGB(200, 200, 210), CFrame.new(0, 1, 0))

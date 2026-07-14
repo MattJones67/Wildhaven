@@ -49,6 +49,19 @@ function PlayerStats.hasAutoHatch(player: Player): boolean
 	return data ~= nil and rebirthUnlockCount(data, "AutoHatch") > 0
 end
 
+-- Patch 4 perk sources: the biome hosting your sanctuary, and your class.
+-- Both return neutral values when unset, so they're safe everywhere.
+local function plotPerk(data): { Income: number?, Luck: number?, HatchSpeed: number? }
+	local biomeName = data.Sanctuary and data.Sanctuary.Biome or "Forest"
+	local biome = GameConfig.BiomeByName[biomeName]
+	return biome and biome.Perk or {}
+end
+
+local function classPerks(data): { Income: number?, Luck: number?, HatchSpeed: number?, MutationChance: number? }
+	local class = data.Class and GameConfig.ClassByName[data.Class]
+	return class and class.Perks or {}
+end
+
 -- Total effective luck for every roll (pets, mutations, sizes)
 function PlayerStats.getLuck(player: Player): number
 	local data = DataService.get(player)
@@ -58,7 +71,19 @@ function PlayerStats.getLuck(player: Player): number
 	local boost = DataService.getLuckMultiplier(player) -- 1, or 2 while boosted
 	local rebirthBonus = 1 + REBIRTH.LuckPerRebirth * (data.Rebirths or 0)
 	local indexBonus = 1 + IndexUtil.bonuses(data.Discovered or {}).Luck
-	return boost * rebirthBonus * indexBonus
+	local plot = plotPerk(data).Luck or 1
+	local class = classPerks(data).Luck or 1
+	return boost * rebirthBonus * indexBonus * plot * class
+end
+
+-- Extra multiplier applied to MUTATION odds only (Demon class, etc.).
+-- HatchService rolls mutations with getLuck() * this.
+function PlayerStats.getMutationLuck(player: Player): number
+	local data = DataService.get(player)
+	if not data then
+		return 1
+	end
+	return classPerks(data).MutationChance or 1
 end
 
 -- Coins/sec from EQUIPPED pets only (the slice-3 rule), fully multiplied
@@ -82,7 +107,9 @@ function PlayerStats.getIncomePerSecond(player: Player): number
 	local upgradeMult = upgradeValue(data, "IncomeBoost")
 	local rebirthMult = 1 + REBIRTH.IncomePerRebirth * (data.Rebirths or 0)
 	local indexMult = 1 + IndexUtil.bonuses(data.Discovered or {}).Income
-	return base * upgradeMult * rebirthMult * indexMult
+	local plotMult = plotPerk(data).Income or 1
+	local classMult = classPerks(data).Income or 1
+	return base * upgradeMult * rebirthMult * indexMult * plotMult * classMult
 end
 
 function PlayerStats.getHatchSpeedMultiplier(player: Player): number
@@ -91,6 +118,8 @@ function PlayerStats.getHatchSpeedMultiplier(player: Player): number
 		return 1
 	end
 	local mult = upgradeValue(data, "HatchSpeed") * (1 - REBIRTH.HatchSpeedPerRebirth) ^ (data.Rebirths or 0)
+	mult *= plotPerk(data).HatchSpeed or 1
+	mult *= classPerks(data).HatchSpeed or 1
 	return math.max(mult, REBIRTH.HatchSpeedFloor)
 end
 
