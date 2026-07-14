@@ -42,7 +42,7 @@ local STORE_NAME = "WildhavenPlayerData_v1" -- bump the suffix to wipe/migrate d
 local AUTOSAVE_SECONDS = 60
 local LOAD_RETRIES = 3
 
-export type CollectionEntry = { Species: string, Mutation: string, Size: string? }
+export type CollectionEntry = { Species: string, Mutation: string, Size: string?, Id: number? }
 export type Hatch = { Slot: number, EggType: string, EndsAt: number }
 export type PlayerData = {
 	Coins: number,
@@ -51,6 +51,18 @@ export type PlayerData = {
 	EggInventory: { string },
 	Hatches: { Hatch },
 	Upgrades: { [string]: number },
+	-- slice 3:
+	NextPetId: number, -- id counter so equips can reference exact pets
+	Equipped: { number }, -- pet Ids currently equipped (income comes from these)
+	Rebirths: number,
+	TotalEarned: number, -- lifetime coins earned (rebirth requirement)
+	Discovered: { [string]: boolean }, -- species seen at least once (the dex)
+	LastDailyClaimAt: number, -- os.time() of last daily reward
+	DailyStreak: number,
+	AutoHatch: boolean, -- player's auto-hatch toggle (works once unlocked)
+	GoalIndex: number, -- which goal in GameConfig.Goals is active (1-based)
+	Stats: { [string]: number }, -- goal counters (EggsCollected, HatchCount, ...)
+	LastSeenAt: number, -- stamped on every save; drives offline income
 }
 
 type Session = {
@@ -79,6 +91,17 @@ local function defaultData(): PlayerData
 		EggInventory = {},
 		Hatches = {},
 		Upgrades = defaultUpgrades(),
+		NextPetId = 1,
+		Equipped = {},
+		Rebirths = 0,
+		TotalEarned = 0,
+		Discovered = {},
+		LastDailyClaimAt = 0,
+		DailyStreak = 0,
+		AutoHatch = false,
+		GoalIndex = 1,
+		Stats = {},
+		LastSeenAt = 0,
 	}
 end
 
@@ -96,6 +119,15 @@ local function reconcile(data: { [string]: any }): PlayerData
 		if data.Upgrades[key] == nil then
 			data.Upgrades[key] = level
 		end
+	end
+	-- MIGRATION (slice 3): give every existing pet a unique Id so equips
+	-- can reference exact pets, and back-fill the dex from old collections.
+	for _, entry in data.Collection do
+		if entry.Id == nil then
+			entry.Id = data.NextPetId
+			data.NextPetId += 1
+		end
+		data.Discovered[entry.Species] = true
 	end
 	return data :: PlayerData
 end
@@ -136,6 +168,7 @@ local function saveData(player: Player, session: Session)
 		warn(("[DataService] skipping save for %s (load failed earlier)"):format(player.Name))
 		return
 	end
+	session.Data.LastSeenAt = os.time() -- offline income measures from here
 	local ok, err = pcall(function()
 		store:SetAsync(keyFor(player), session.Data)
 	end)
@@ -186,6 +219,16 @@ function DataService.getLuckSecondsLeft(player: Player): number
 		return 0
 	end
 	return math.max(0, data.LuckEndsAt - os.time())
+end
+
+-- Grant coins the RIGHT way: every gain also counts toward TotalEarned,
+-- which is what gates rebirth. (Spending goes through data.Coins directly.)
+function DataService.grantCoins(player: Player, amount: number)
+	local data = DataService.get(player)
+	if data and amount > 0 then
+		data.Coins += amount
+		data.TotalEarned += amount
+	end
 end
 
 -- Iterate all loaded players (used by IncomeService's tick).

@@ -19,6 +19,9 @@ local DEFINITIONS = {
 	StartHatch = "RemoteFunction", -- "put one of my <egg type> into a hatch slot"
 	BuyLuckBoost = "RemoteFunction", -- "buy a luck boost"
 	BuyUpgrade = "RemoteFunction", -- "buy the next level of <upgrade key>"
+	ToggleEquip = "RemoteFunction", -- "equip/unequip pet <id>"
+	Rebirth = "RemoteFunction", -- "I want to rebirth"
+	ToggleAutoHatch = "RemoteFunction", -- "turn auto-hatch on/off"
 
 	-- server -> client pushes (client just renders these)
 	StateUpdate = "RemoteEvent", -- coins / income / luck every tick
@@ -28,6 +31,13 @@ local DEFINITIONS = {
 	HatchComplete = "RemoteEvent", -- a hatch finished: play the reveal
 	Notify = "RemoteEvent", -- small toast messages ("+1 Forest Egg")
 	MythicAnnounce = "RemoteEvent", -- server-wide: a Mythic Egg spawned!
+	EquipUpdate = "RemoteEvent", -- YOUR equipped pet ids + slot count
+	EquipBroadcast = "RemoteEvent", -- EVERYONE's equipped pets (for follow visuals)
+	IndexUpdate = "RemoteEvent", -- discovered-pets set changed (dex fills in)
+	GoalUpdate = "RemoteEvent", -- current goal text/progress changed
+	RebirthCelebrate = "RemoteEvent", -- big rebirth celebration trigger
+	WelcomeBack = "RemoteEvent", -- offline earnings popup on join
+	DailyReward = "RemoteEvent", -- daily login reward popup
 }
 
 local Remotes = {}

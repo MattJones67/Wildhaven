@@ -26,7 +26,10 @@ local Remotes = require(ReplicatedStorage.Remotes)
 
 local BaseBuilder = require(script.Parent.BaseBuilder)
 local DataService = require(script.Parent.DataService)
+local EquipService = require(script.Parent.EquipService)
 local ForestGenerator = require(script.Parent.ForestGenerator)
+local GoalService = require(script.Parent.GoalService)
+local PlayerStats = require(script.Parent.PlayerStats)
 
 local BaseUpgradeService = {}
 
@@ -60,20 +63,11 @@ local function upgradeValue(player: Player, key: string): any
 	return upgrade.Values[math.clamp(level, 1, #upgrade.Values)]
 end
 
-function BaseUpgradeService.getEggCapacity(player: Player): number
-	return upgradeValue(player, "EggCapacity")
-end
-
+-- NOTE (slice 3): derived stats that stack with rebirth/index bonuses
+-- (egg capacity, hatch speed, income, luck, equip slots) live in
+-- PlayerStats now. Only plain per-key reads remain here.
 function BaseUpgradeService.getHatchSlots(player: Player): number
 	return upgradeValue(player, "HatchSlots")
-end
-
-function BaseUpgradeService.getHatchSpeedMultiplier(player: Player): number
-	return upgradeValue(player, "HatchSpeed")
-end
-
-function BaseUpgradeService.getIncomeMultiplier(player: Player): number
-	return upgradeValue(player, "IncomeBoost")
 end
 
 function BaseUpgradeService.getPlotCFrame(player: Player): CFrame?
@@ -117,7 +111,7 @@ local function rebuildPlot(plotIndex: number)
 		claims[owner].Model:Destroy()
 	end
 
-	local model, pads = BaseBuilder.build(basesFolder, plotCFrame, lookFor(owner), owner and owner.DisplayName or nil)
+	local model, pads = BaseBuilder.build(basesFolder, plotCFrame, lookFor(owner), owner and owner.DisplayName or nil, plotIndex)
 	if owner and claims[owner] then
 		claims[owner].Model = model
 		claims[owner].PadPositions = pads
@@ -136,9 +130,25 @@ function BaseUpgradeService.pushUpgrades(player: Player)
 	end
 	Remotes.UpgradesUpdate:FireClient(player, {
 		Upgrades = data.Upgrades,
-		EggCapacity = BaseUpgradeService.getEggCapacity(player),
+		EggCapacity = PlayerStats.getEggCapacity(player),
 		HatchSlots = BaseUpgradeService.getHatchSlots(player),
+		EquipSlots = PlayerStats.getEquipSlots(player),
 	})
+end
+
+-- Rebuild everything that depends on upgrade levels (used after rebirth
+-- resets them): cabin visuals, walk speed, and the client's upgrade UI.
+function BaseUpgradeService.refresh(player: Player)
+	local claim = claims[player]
+	if claim then
+		rebuildPlot(claim.PlotIndex)
+	end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.WalkSpeed = upgradeValue(player, "WalkSpeed")
+	end
+	BaseUpgradeService.pushUpgrades(player)
 end
 
 -- ------------------------------------------------------------
@@ -196,10 +206,13 @@ local function onBuyUpgrade(player: Player, key: any)
 		if claim then
 			rebuildPlot(claim.PlotIndex)
 		end
+	elseif key == "EquipSlots" then
+		EquipService.pushEquipped(player) -- the equip UI shows the new slot count
 	end
-	-- (EggCapacity and IncomeBoost need no world change — the getters see
+	-- (EggCapacity and IncomeBoost need no world change — PlayerStats sees
 	-- the new level instantly; the next income tick reflects it.)
 
+	GoalService.bump(player, "UpgradesBought")
 	BaseUpgradeService.pushUpgrades(player)
 	return { Success = true, Coins = math.floor(data.Coins) }
 end

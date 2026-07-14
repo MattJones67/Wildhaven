@@ -47,8 +47,20 @@ local eggCounts: { [string]: number } = {}
 local eggTotal = 0
 local eggCapacity = 3
 local upgradeLevels: { [string]: number } = {}
+local collectionCache: { { Species: string, Mutation: string, Size: string?, Id: number? } } = {}
+local equippedIds: { [number]: boolean } = {}
+local equippedCount = 0
+local equipSlots = 2
+local autoHatchUnlocked = false
+local autoHatchEnabled = false
 
-local handlersRef: { onStartHatch: (string) -> (), onBuyLuck: () -> (), onBuyUpgrade: (string) -> () }
+local handlersRef: {
+	onStartHatch: (string) -> (),
+	onBuyLuck: () -> (),
+	onBuyUpgrade: (string) -> (),
+	onToggleEquip: (number) -> (),
+	onToggleAutoHatch: () -> (),
+}
 
 -- Instances
 local coinsLabel: TextLabel
@@ -60,6 +72,8 @@ local luckButton: TextButton
 local luckTitleLabel: TextLabel
 local luckSubLabel: TextLabel
 local collectionGrid: ScrollingFrame
+local collectionSlotsLabel: TextLabel
+local autoHatchButton: TextButton
 local eggPanelRows: Frame
 local upgradeRows: ScrollingFrame
 local toastColumn: Frame
@@ -345,7 +359,51 @@ local function buildEggPanel(gui: ScreenGui): Frame
 		eggRowRefs[egg.Name] = { Count = count, Button = hatchButton }
 	end
 
+	-- AUTO-HATCH toggle (rebirth 2 unlock): satchel eggs hatch themselves
+	local autoRow = Instance.new("Frame")
+	autoRow.Size = UDim2.new(1, 0, 0, 54)
+	autoRow.BackgroundColor3 = Color3.fromRGB(45, 50, 62)
+	autoRow.LayoutOrder = 99
+	autoRow.Parent = eggPanelRows
+	round(autoRow, 12)
+	makeLabel(autoRow, {
+		Position = UDim2.new(0, 12, 0, 6),
+		Size = UDim2.new(0.55, 0, 1, -12),
+		Text = "🤖 Auto-Hatch",
+		TextColor3 = Color3.new(1, 1, 1),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	autoHatchButton = makeButton(autoRow, {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -10, 0.5, 0),
+		Size = UDim2.new(0, 130, 0, 40),
+		BackgroundColor3 = Color3.fromRGB(110, 120, 115),
+		Text = "🔒 Rebirth 2",
+	})
+	autoHatchButton.Activated:Connect(function()
+		handlersRef.onToggleAutoHatch()
+	end)
+
 	return panel
+end
+
+local function refreshAutoHatch()
+	if not autoHatchUnlocked then
+		autoHatchButton.Text = "🔒 Rebirth 2"
+		autoHatchButton.BackgroundColor3 = Color3.fromRGB(110, 120, 115)
+	elseif autoHatchEnabled then
+		autoHatchButton.Text = "ON"
+		autoHatchButton.BackgroundColor3 = GREEN
+	else
+		autoHatchButton.Text = "OFF"
+		autoHatchButton.BackgroundColor3 = Color3.fromRGB(140, 120, 110)
+	end
+end
+
+function UIController.setAutoHatch(unlocked: boolean, enabled: boolean)
+	autoHatchUnlocked = unlocked
+	autoHatchEnabled = enabled
+	refreshAutoHatch()
 end
 
 local function refreshEggRows()
@@ -472,6 +530,16 @@ local function buildCollectionUI(gui: ScreenGui): Frame
 
 	local panel = makePanel(gui, "📦 My Pets")
 
+	-- Live "2/2 equipped" readout in the panel header
+	collectionSlotsLabel = makeLabel(panel, {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -16, 0, 12),
+		Size = UDim2.new(0, 190, 0, 30),
+		Text = "⭐ 0/2 equipped",
+		TextColor3 = Color3.fromRGB(255, 225, 150),
+		TextXAlignment = Enum.TextXAlignment.Right,
+	})
+
 	collectionGrid = Instance.new("ScrollingFrame")
 	collectionGrid.Position = UDim2.new(0, 12, 0, 52)
 	collectionGrid.Size = UDim2.new(1, -24, 1, -64)
@@ -483,7 +551,7 @@ local function buildCollectionUI(gui: ScreenGui): Frame
 	collectionGrid.Parent = panel
 
 	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.new(0, 116, 0, 158)
+	layout.CellSize = UDim2.new(0, 116, 0, 192)
 	layout.CellPadding = UDim2.new(0, 10, 0, 10)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = collectionGrid
@@ -547,11 +615,61 @@ local function makeCard(group, layoutOrder: number)
 	})
 
 	makeLabel(card, {
-		Position = UDim2.new(0, 4, 1, -24),
-		Size = UDim2.new(1, -8, 0, 20),
+		Position = UDim2.new(0, 4, 0, 130),
+		Size = UDim2.new(1, -8, 0, 18),
 		Text = "x" .. group.Count,
 		TextColor3 = Color3.new(1, 1, 1),
 	})
+
+	-- EQUIP CONTROLS: which of this group's pets are on the team?
+	local equippedHere = 0
+	local equipTargetId, unequipTargetId
+	for _, id in group.Ids do
+		if equippedIds[id] then
+			equippedHere += 1
+			unequipTargetId = id
+		elseif not equipTargetId then
+			equipTargetId = id
+		end
+	end
+
+	if equippedHere > 0 then
+		-- Star badge in the corner + green glow on the border
+		makeLabel(card, {
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -4, 0, 2),
+			Size = UDim2.new(0, 44, 0, 22),
+			Text = "⭐" .. (equippedHere > 1 and equippedHere or ""),
+			TextColor3 = Color3.fromRGB(255, 225, 150),
+		})
+	end
+
+	local equipButton = makeButton(card, {
+		Position = UDim2.new(0, 6, 1, -38),
+		Size = UDim2.new(equippedHere > 0 and 0.55 or 1, equippedHere > 0 and -8 or -12, 0, 32),
+		BackgroundColor3 = equipTargetId and GREEN or Color3.fromRGB(110, 120, 115),
+		Text = "EQUIP",
+	})
+	equipButton.Activated:Connect(function()
+		if equipTargetId then
+			handlersRef.onToggleEquip(equipTargetId)
+		end
+	end)
+
+	if equippedHere > 0 then
+		local unequipButton = makeButton(card, {
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -6, 1, -38),
+			Size = UDim2.new(0.4, -4, 0, 32),
+			BackgroundColor3 = Color3.fromRGB(200, 110, 100),
+			Text = "－",
+		})
+		unequipButton.Activated:Connect(function()
+			if unequipTargetId then
+				handlersRef.onToggleEquip(unequipTargetId)
+			end
+		end)
+	end
 
 	card.Parent = collectionGrid
 end
@@ -682,16 +800,20 @@ function UIController.setEggInventory(inventory: { string }, capacity: number)
 	refreshEggRows()
 end
 
-function UIController.setUpgrades(payload: { Upgrades: { [string]: number }, EggCapacity: number? })
+function UIController.setUpgrades(payload: { Upgrades: { [string]: number }, EggCapacity: number?, EquipSlots: number? })
 	upgradeLevels = payload.Upgrades or {}
 	if payload.EggCapacity then
 		eggCapacity = payload.EggCapacity
 		refreshEggRows()
 	end
+	if payload.EquipSlots then
+		equipSlots = payload.EquipSlots
+		rebuildCollection()
+	end
 	refreshUpgradeRows()
 end
 
-function UIController.setCollection(collection: { { Species: string, Mutation: string, Size: string? } })
+local function rebuildCollection()
 	for _, child in collectionGrid:GetChildren() do
 		if child:IsA("Frame") then
 			child:Destroy()
@@ -699,13 +821,14 @@ function UIController.setCollection(collection: { { Species: string, Mutation: s
 	end
 
 	local groups: { [string]: any } = {}
-	for _, entry in collection do
+	for _, entry in collectionCache do
 		local size = entry.Size or "Normal"
 		local key = entry.Species .. "|" .. entry.Mutation .. "|" .. size
 		if groups[key] then
 			groups[key].Count += 1
+			table.insert(groups[key].Ids, entry.Id)
 		else
-			groups[key] = { Species = entry.Species, Mutation = entry.Mutation, Size = size, Count = 1 }
+			groups[key] = { Species = entry.Species, Mutation = entry.Mutation, Size = size, Count = 1, Ids = { entry.Id } }
 		end
 	end
 
@@ -729,6 +852,26 @@ function UIController.setCollection(collection: { { Species: string, Mutation: s
 	for order, group in sorted do
 		makeCard(group, order)
 	end
+	collectionSlotsLabel.Text = ("⭐ %d/%d equipped"):format(equippedCount, equipSlots)
+end
+
+function UIController.setCollection(collection: { { Species: string, Mutation: string, Size: string?, Id: number? } })
+	collectionCache = collection or {}
+	rebuildCollection()
+end
+
+-- Called on EquipUpdate: refresh which cards show as equipped
+function UIController.setEquipped(payload: { Equipped: { number }, Slots: number? })
+	equippedIds = {}
+	equippedCount = 0
+	for _, id in payload.Equipped or {} do
+		equippedIds[id] = true
+		equippedCount += 1
+	end
+	if payload.Slots then
+		equipSlots = payload.Slots
+	end
+	rebuildCollection()
 end
 
 function UIController.showError(message: string)

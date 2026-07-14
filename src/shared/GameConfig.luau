@@ -60,22 +60,24 @@ end
 -- ============================================================
 -- PET ROSTER (12 forest pets across the full ladder)
 -- IncomePerSecond = coins/sec BEFORE mutation and size multipliers.
--- Bunny/Hedgehog/Fox/Fawn/Owl/Golden Stag carried over from slice 1 so
--- existing saved collections keep working unchanged.
+--
+-- RETUNED for slice 3: income now comes ONLY from EQUIPPED pets (2 slots
+-- at the start), so each pet earns roughly 2.5x its old rate — two
+-- Commons still feel rewarding in the first minutes.
 -- ============================================================
 GameConfig.Animals = {
-	{ Name = "Squirrel", Rarity = "Common", IncomePerSecond = 1 },
-	{ Name = "Bunny", Rarity = "Common", IncomePerSecond = 1.5 },
-	{ Name = "Raccoon", Rarity = "Uncommon", IncomePerSecond = 4 },
-	{ Name = "Hedgehog", Rarity = "Uncommon", IncomePerSecond = 5 },
-	{ Name = "Fox", Rarity = "Rare", IncomePerSecond = 12 },
-	{ Name = "Boar", Rarity = "Rare", IncomePerSecond = 16 },
-	{ Name = "Wolf", Rarity = "Epic", IncomePerSecond = 45 },
-	{ Name = "Fawn", Rarity = "Epic", IncomePerSecond = 60 },
-	{ Name = "Bear", Rarity = "Legendary", IncomePerSecond = 140 },
-	{ Name = "Owl", Rarity = "Legendary", IncomePerSecond = 180 },
-	{ Name = "Golden Stag", Rarity = "Mythic", IncomePerSecond = 500 },
-	{ Name = "Spirit Lynx", Rarity = "Mythic", IncomePerSecond = 750 },
+	{ Name = "Squirrel", Rarity = "Common", IncomePerSecond = 2 },
+	{ Name = "Bunny", Rarity = "Common", IncomePerSecond = 3 },
+	{ Name = "Raccoon", Rarity = "Uncommon", IncomePerSecond = 8 },
+	{ Name = "Hedgehog", Rarity = "Uncommon", IncomePerSecond = 10 },
+	{ Name = "Fox", Rarity = "Rare", IncomePerSecond = 25 },
+	{ Name = "Boar", Rarity = "Rare", IncomePerSecond = 35 },
+	{ Name = "Wolf", Rarity = "Epic", IncomePerSecond = 90 },
+	{ Name = "Fawn", Rarity = "Epic", IncomePerSecond = 120 },
+	{ Name = "Bear", Rarity = "Legendary", IncomePerSecond = 280 },
+	{ Name = "Owl", Rarity = "Legendary", IncomePerSecond = 360 },
+	{ Name = "Golden Stag", Rarity = "Mythic", IncomePerSecond = 1000 },
+	{ Name = "Spirit Lynx", Rarity = "Mythic", IncomePerSecond = 1500 },
 }
 
 GameConfig.AnimalByName = {}
@@ -258,6 +260,14 @@ GameConfig.BaseUpgrades = {
 		Prices = { 0, 200, 800, 4000, 20000 },
 	},
 	{
+		Key = "EquipSlots",
+		Title = "Pet Team",
+		Kind = "Functional",
+		Describe = "%s equip slots",
+		Values = { 2, 3, 4, 5 }, -- equipped-pet slots (rebirth unlocks add MORE on top)
+		Prices = { 0, 2500, 20000, 100000 },
+	},
+	{
 		Key = "BaseTier",
 		Title = "Home",
 		Kind = "Aesthetic",
@@ -296,8 +306,129 @@ for _, upgrade in GameConfig.BaseUpgrades do
 	GameConfig.UpgradeByKey[upgrade.Key] = upgrade
 end
 
--- TODO (future slices): free-build sanctuary zones and RebirthService both
--- plug in here as new config tables — see init.server for the service hooks.
+-- ============================================================
+-- EQUIPPED PET FOLLOWING (client visuals only — pure charm numbers)
+-- ============================================================
+GameConfig.Equip = {
+	FollowRadius = 4.5, -- how far behind the character pets hover
+	FollowHeight = 1.6, -- hover height off the ground
+	FollowScale = 0.8, -- pets shrink a little while following (before Size scale)
+	BobAmount = 0.3, -- vertical bob while idle
+	LerpSpeed = 6, -- how snappily pets chase their follow spot
+}
+
+-- ============================================================
+-- REBIRTH — the long-term spine. Rebirth resets coins + ALL base upgrade
+-- levels, in exchange for PERMANENT stacking multipliers and unlocks.
+-- Pets, eggs, discoveries, and running hatches are KEPT.
+--
+-- Requirement: lifetime TotalEarned >= RequirementBase * RequirementGrowth^n
+-- (n = rebirths done so far): 25k, 100k, 400k, 1.6M, ...
+-- ============================================================
+GameConfig.Rebirth = {
+	RequirementBase = 25000,
+	RequirementGrowth = 4,
+
+	-- Permanent per-rebirth gains (all stack linearly/multiplicatively):
+	IncomePerRebirth = 0.5, -- +50% income each rebirth (multiplier = 1 + 0.5n)
+	LuckPerRebirth = 0.25, -- +25% luck each rebirth
+	HatchSpeedPerRebirth = 0.05, -- hatches 5% faster per rebirth (compounding)
+	HatchSpeedFloor = 0.25, -- hatch time can never drop below 25% of base
+	CapacityPerRebirth = 2, -- +2 egg satchel capacity each rebirth
+
+	-- Tangible unlock ladder (rebirth number -> what it unlocks).
+	-- "EquipSlot" adds +1 equip slot on top of the Pet Team upgrade.
+	Unlocks = {
+		{ Rebirth = 1, Type = "EquipSlot", Label = "+1 Equip Slot" },
+		{ Rebirth = 2, Type = "AutoHatch", Label = "🤖 AUTO-HATCH unlocked!" },
+		{ Rebirth = 3, Type = "EquipSlot", Label = "+1 Equip Slot" },
+		{ Rebirth = 5, Type = "EquipSlot", Label = "+1 Equip Slot" },
+	},
+}
+
+-- ============================================================
+-- COLLECTION INDEX — discover every pet. Completing a rarity's full set
+-- grants a PERMANENT bonus (computed live from the discovered list).
+-- Bonus values are fractions: Income = 0.1 means +10% income forever.
+-- ============================================================
+GameConfig.IndexRewards = {
+	{ Rarity = "Common", Bonus = { Income = 0.1 }, Label = "Common set: +10% income" },
+	{ Rarity = "Uncommon", Bonus = { Luck = 0.1 }, Label = "Uncommon set: +10% luck" },
+	{ Rarity = "Rare", Bonus = { Income = 0.15 }, Label = "Rare set: +15% income" },
+	{ Rarity = "Epic", Bonus = { Luck = 0.15 }, Label = "Epic set: +15% luck" },
+	{ Rarity = "Legendary", Bonus = { Income = 0.25 }, Label = "Legendary set: +25% income" },
+	{ Rarity = "Mythic", Bonus = { Income = 0.5, Luck = 0.25 }, Label = "Mythic set: +50% income, +25% luck" },
+}
+
+-- ============================================================
+-- DAILY LOGIN REWARDS — escalate through the streak, then repeat day 7.
+-- Missing more than DailyGraceSeconds resets the streak to day 1.
+-- ============================================================
+GameConfig.Daily = {
+	CooldownSeconds = 24 * 3600, -- one claim per 24h (server-timestamped)
+	GraceSeconds = 48 * 3600, -- come back within 48h or the streak resets
+	Rewards = {
+		{ Type = "Coins", Amount = 100, Label = "100 🪙" },
+		{ Type = "Coins", Amount = 250, Label = "250 🪙" },
+		{ Type = "LuckBoost", Label = "Free 🍀 Luck Boost" },
+		{ Type = "Coins", Amount = 750, Label = "750 🪙" },
+		{ Type = "Egg", EggType = "Mossy Egg", Label = "A Mossy Egg 🥚" },
+		{ Type = "Coins", Amount = 2000, Label = "2,000 🪙" },
+		{ Type = "Egg", EggType = "Ancient Egg", Label = "An Ancient Egg 🥚✨" },
+	},
+}
+
+-- ============================================================
+-- OFFLINE INCOME — equipped pets keep earning while you're away
+-- (at a reduced rate, capped) so coming back always feels good.
+-- ============================================================
+GameConfig.Offline = {
+	MinAwaySeconds = 300, -- ignore absences under 5 minutes
+	MaxSeconds = 8 * 3600, -- earn for at most 8 hours away
+	RateMultiplier = 0.5, -- offline earnings run at 50% of live rate
+}
+
+-- ============================================================
+-- AUTO-HATCH (unlocked at rebirth 2) — eggs from the satchel flow into
+-- free hatch slots automatically, from anywhere on the island.
+-- ============================================================
+GameConfig.AutoHatch = {
+	IntervalSeconds = 2, -- how often the server tries to auto-fill slots
+}
+
+-- ============================================================
+-- GOAL LADDER — the HUD always shows your next objective. Completing one
+-- grants coins and reveals the next. Stats are tracked server-side.
+-- Stat keys: EggsCollected, HatchCount, EquippedCount, IncomePerSec,
+--            DiscoveredCount, BestRarityOrder, UpgradesBought, Rebirths
+-- ============================================================
+GameConfig.Goals = {
+	{ Text = "Collect an egg", Stat = "EggsCollected", Target = 1, Reward = 50 },
+	{ Text = "Hatch an egg", Stat = "HatchCount", Target = 1, Reward = 100 },
+	{ Text = "Equip 2 pets", Stat = "EquippedCount", Target = 2, Reward = 150 },
+	{ Text = "Discover 4 pets", Stat = "DiscoveredCount", Target = 4, Reward = 250 },
+	{ Text = "Reach 50 🪙/s", Stat = "IncomePerSec", Target = 50, Reward = 400 },
+	{ Text = "Hatch a Rare or better", Stat = "BestRarityOrder", Target = 3, Reward = 750 },
+	{ Text = "Buy a base upgrade", Stat = "UpgradesBought", Target = 1, Reward = 500 },
+	{ Text = "Discover 8 pets", Stat = "DiscoveredCount", Target = 8, Reward = 1500 },
+	{ Text = "Reach 500 🪙/s", Stat = "IncomePerSec", Target = 500, Reward = 2500 },
+	{ Text = "Rebirth once", Stat = "Rebirths", Target = 1, Reward = 5000 },
+	{ Text = "Discover all 12 pets", Stat = "DiscoveredCount", Target = 12, Reward = 10000 },
+	{ Text = "Reach 5,000 🪙/s", Stat = "IncomePerSec", Target = 5000, Reward = 25000 },
+}
+
+-- ============================================================
+-- WORLD EGG VISIBILITY — world eggs are big, floating, glowing beacons
+-- ============================================================
+GameConfig.WorldEggVisual = {
+	Scale = 1.9, -- world eggs are nearly 2x the hatchery egg size
+	FloatHeight = 1.6, -- they hover this far off the ground
+	BeamHeight = 16, -- the vertical light column above each egg
+	HaloHeight = 4.6, -- the spinning rarity ring floats this high
+}
+
+-- TODO (future slices): free-build sanctuary zones plug in here as new
+-- config tables — see init.server for the service hooks.
 
 -- ============================================================
 -- FOREST GENERATION

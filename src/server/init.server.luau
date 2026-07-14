@@ -6,10 +6,10 @@
 	  2. DataService        (players can start loading data immediately)
 	  3. ForestGenerator    (the island exists before anyone finishes spawning)
 	  4. BaseUpgradeService (village cabins built; plots claimable)
-	  5. IncomeService, HatchService, EggSpawnService, ShopService (gameplay live)
+	  5. Gameplay services  (income, equip, goals, hatchery, eggs, shop)
+	  6. RebirthService + ReturnsService (meta progression + welcome-back)
 
-	TODO (later passes): SanctuaryService (free-build zones) and
-	RebirthService get required and init()-ed here, same pattern.
+	TODO (later passes): SanctuaryService (free-build zones) plugs in here.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,17 +20,25 @@ require(ReplicatedStorage.Remotes)
 local DataService = require(script.DataService)
 local ForestGenerator = require(script.ForestGenerator)
 local BaseUpgradeService = require(script.BaseUpgradeService)
+local GoalService = require(script.GoalService)
 local IncomeService = require(script.IncomeService)
+local EquipService = require(script.EquipService)
 local HatchService = require(script.HatchService)
 local EggSpawnService = require(script.EggSpawnService)
 local ShopService = require(script.ShopService)
+local RebirthService = require(script.RebirthService)
+local ReturnsService = require(script.ReturnsService)
 
 DataService.init()
 ForestGenerator.build()
 BaseUpgradeService.init()
+GoalService.init()
 IncomeService.init()
+EquipService.init()
 HatchService.init()
 EggSpawnService.init()
 ShopService.init()
+RebirthService.init()
+ReturnsService.init()
 
 print("[Wildhaven] Server ready 🌲")

@@ -68,6 +68,12 @@ function Sounds.hatchPop()
 	play(ASSETS.Blip, 0.9, 0.4)
 end
 
+-- Pet zips onto (or off) the team
+function Sounds.equipPop()
+	play(ASSETS.Snap, 1.8, 0.3)
+	play(ASSETS.Blip, 1.7, 0.25)
+end
+
 -- Satisfying pop + chime when you pick up a world egg
 function Sounds.eggPickup()
 	play(ASSETS.Snap, 1.6, 0.35)

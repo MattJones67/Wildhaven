@@ -13,7 +13,10 @@
 ]]
 
 local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+
+local GameConfig = require(ReplicatedStorage.GameConfig)
 
 local EggFXController = {}
 
@@ -64,9 +67,10 @@ local function onHeartbeat()
 			worldEggs[model] = nil
 			continue
 		end
-		-- Soft bob + lazy spin: "I'm collectible!"
-		local bob = math.sin(clock * 2 + tracked.Base.Position.X) * 0.35
-		model:PivotTo(tracked.Base * CFrame.new(0, 0.4 + bob, 0) * CFrame.Angles(0, clock * 0.8, 0))
+		-- Float well off the ground + soft bob + lazy spin: "I'm collectible!"
+		local floatHeight = GameConfig.WorldEggVisual.FloatHeight
+		local bob = math.sin(clock * 2 + tracked.Base.Position.X) * 0.45
+		model:PivotTo(tracked.Base * CFrame.new(0, floatHeight + bob, 0) * CFrame.Angles(0, clock * 0.8, 0))
 	end
 
 	for model, tracked in slotEggs do

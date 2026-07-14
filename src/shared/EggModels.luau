@@ -92,4 +92,51 @@ function EggModels.create(eggName: string): Model
 	return model
 end
 
+-- WORLD egg: the beacon version. Much bigger, brighter light, a vertical
+-- glow beam, and a floating rarity-colored halo ring — spottable across
+-- the island. (Hatchery + reveal eggs stay the small, cozy size.)
+function EggModels.createWorldEgg(eggName: string): Model
+	local egg = GameConfig.EggByName[eggName]
+	local visual = GameConfig.WorldEggVisual
+	local model = EggModels.create(eggName)
+	model:ScaleTo(visual.Scale)
+
+	local shell = model.PrimaryPart :: Part
+	local light = shell:FindFirstChildOfClass("PointLight")
+	if light then
+		light.Brightness *= 2
+		light.Range += 8
+	end
+
+	-- Vertical glow column so the egg reads from far away
+	local beam = Instance.new("Part")
+	beam.Name = "Beam"
+	beam.Shape = Enum.PartType.Cylinder
+	beam.Size = Vector3.new(visual.BeamHeight, 1.4, 1.4)
+	beam.Color = egg.Color
+	beam.Material = Enum.Material.Neon
+	beam.Transparency = 0.55 - math.min(egg.GlowIntensity * 0.06, 0.3) -- rarer = more solid
+	beam.Anchored = true
+	beam.CanCollide = false
+	beam.CanQuery = false
+	beam.CFrame = shell.CFrame * CFrame.new(0, visual.BeamHeight / 2, 0) * CFrame.Angles(0, 0, math.rad(90))
+	beam.Parent = model
+
+	-- Floating halo ring in the egg's color
+	local halo = Instance.new("Part")
+	halo.Name = "Halo"
+	halo.Shape = Enum.PartType.Cylinder
+	halo.Size = Vector3.new(0.25, 3.4, 3.4)
+	halo.Color = egg.Color
+	halo.Material = Enum.Material.Neon
+	halo.Transparency = 0.25
+	halo.Anchored = true
+	halo.CanCollide = false
+	halo.CanQuery = false
+	halo.CFrame = shell.CFrame * CFrame.new(0, visual.HaloHeight, 0) * CFrame.Angles(0, 0, math.rad(90))
+	halo.Parent = model
+
+	return model
+end
+
 return EggModels

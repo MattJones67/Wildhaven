@@ -66,18 +66,52 @@ local function buildLantern(parent: Instance, origin: CFrame, offset: Vector3)
 	addLight(lantern, Color3.fromRGB(255, 210, 140), 10)
 end
 
--- The main cabin body: shared by all tiers, scaled up per tier
-local function buildCabinBody(model: Model, origin: CFrame, tier: number)
-	local width = 8 + (tier - 1) * 2 -- 8 / 10 / 12
-	local depth = 7 + (tier - 1) * 1.5
-	local height = 5.5 + (tier - 1)
+-- Warm roof color variety so the village feels handmade, not stamped
+local ROOF_COLORS = {
+	Color3.fromRGB(165, 80, 60),
+	Color3.fromRGB(150, 95, 60),
+	Color3.fromRGB(130, 85, 75),
+	Color3.fromRGB(110, 100, 70),
+}
 
-	-- Walls (one box), floor slab, door, window
+-- The main cabin body: log-cabin styling shared by all tiers
+local function buildCabinBody(model: Model, origin: CFrame, tier: number, rng: Random)
+	local width = (8 + (tier - 1) * 2) * rng:NextNumber(0.95, 1.1) -- 8 / 10 / 12-ish
+	local depth = (7 + (tier - 1) * 1.5) * rng:NextNumber(0.95, 1.1)
+	local height = 5.5 + (tier - 1)
+	local roofColor = ROOF_COLORS[rng:NextInteger(1, #ROOF_COLORS)]
+
+	-- Walls
 	makePart(model, {
 		Size = Vector3.new(width, height, depth),
 		Color = WOOD,
 		CFrame = origin * CFrame.new(0, height / 2, -depth / 2 - 2),
 	})
+	-- Log-cabin courses: horizontal logs across the front face
+	-- (cylinder axis runs along X, which is already the cabin's width)
+	for course = 1, 3 do
+		local log = makePart(model, {
+			Size = Vector3.new(width + 0.5, 0.7, 0.7),
+			Color = DARK_WOOD,
+			CanCollide = false,
+			CFrame = origin * CFrame.new(0, course * 1.5 - 0.4, -1.95),
+		})
+		log.Shape = Enum.PartType.Cylinder
+	end
+	-- Chunky corner posts
+	for _, sx in { -1, 1 } do
+		for _, sz in { 0, 1 } do
+			local post = makePart(model, {
+				Size = Vector3.new(height + 0.4, 1, 1),
+				Color = DARK_WOOD,
+				CanCollide = false,
+				CFrame = origin * CFrame.new(sx * (width / 2), height / 2, -2 - sz * (depth - 0.4)) * CFrame.Angles(0, 0, math.rad(90)),
+			})
+			post.Shape = Enum.PartType.Cylinder
+		end
+	end
+
+	-- Door + TWO glowing windows (warm light inside every home)
 	makePart(model, {
 		Name = "Door",
 		Size = Vector3.new(2.2, 3.6, 0.3),
@@ -85,28 +119,70 @@ local function buildCabinBody(model: Model, origin: CFrame, tier: number)
 		CanCollide = false,
 		CFrame = origin * CFrame.new(0, 1.8, -1.95),
 	})
-	makePart(model, {
-		Name = "Window",
-		Size = Vector3.new(1.8, 1.8, 0.3),
-		Color = Color3.fromRGB(255, 235, 170),
-		Material = Enum.Material.Neon,
-		CanCollide = false,
-		CFrame = origin * CFrame.new(width / 4 + 0.5, 3.2, -1.95),
-	})
+	for _, side in { -1, 1 } do
+		makePart(model, {
+			Name = "Window",
+			Size = Vector3.new(1.7, 1.7, 0.3),
+			Color = Color3.fromRGB(255, 235, 170),
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			CFrame = origin * CFrame.new(side * (width / 4 + 0.4), 3.2, -1.95),
+		})
+		-- Window box with little flowers under each window
+		makePart(model, {
+			Size = Vector3.new(1.8, 0.4, 0.5),
+			Color = DARK_WOOD,
+			CanCollide = false,
+			CFrame = origin * CFrame.new(side * (width / 4 + 0.4), 2.2, -1.75),
+		})
+	end
+	local windowGlow = Instance.new("PointLight")
+	windowGlow.Color = Color3.fromRGB(255, 210, 140)
+	windowGlow.Brightness = 0.8
+	windowGlow.Range = 10
+	windowGlow.Parent = model:FindFirstChild("Door")
 
-	-- Gable roof: two big wedges leaning together
+	-- Pitched gable roof
 	for _, side in { -1, 1 } do
 		makeWedge(model, {
-			Size = Vector3.new(width + 1.2, 2.6, (depth + 1.2) / 2),
-			Color = ROOF,
+			Size = Vector3.new(width + 1.4, 2.8, (depth + 1.4) / 2),
+			Color = roofColor,
 			Material = Enum.Material.SmoothPlastic,
 			CFrame = origin
-				* CFrame.new(0, height + 1.3, -depth / 2 - 2 + side * (depth + 1.2) / 4)
+				* CFrame.new(0, height + 1.4, -depth / 2 - 2 + side * (depth + 1.4) / 4)
 				* CFrame.Angles(0, side == 1 and math.pi or 0, 0),
 		})
 	end
 
+	-- Porch steps down from the door (every tier gets a proper entrance)
+	for step = 1, 2 do
+		makePart(model, {
+			Size = Vector3.new(2.8, 0.35, 0.9),
+			Color = Color3.fromRGB(160, 155, 148),
+			Material = Enum.Material.Slate,
+			CFrame = origin * CFrame.new(0, 0.55 - step * 0.35, -1.4 + step * 0.85),
+		})
+	end
+
 	return width, depth, height
+end
+
+-- Stone chimney with drifting smoke — every home is lived-in
+local function buildChimneySmall(model: Model, origin: CFrame, width: number, height: number)
+	local chimney = makePart(model, {
+		Size = Vector3.new(1.4, height + 2.8, 1.4),
+		Color = STONE,
+		Material = Enum.Material.Slate,
+		CFrame = origin * CFrame.new(width / 2 - 0.3, (height + 2.8) / 2, -4.5),
+	})
+	local smoke = Instance.new("ParticleEmitter")
+	smoke.Color = ColorSequence.new(Color3.fromRGB(200, 198, 195))
+	smoke.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 1) })
+	smoke.Rate = 2
+	smoke.Lifetime = NumberRange.new(2, 3)
+	smoke.Speed = NumberRange.new(1.5, 2.5)
+	smoke.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 2) })
+	smoke.Parent = chimney
 end
 
 -- Tier 2+: porch with posts and an awning
@@ -214,16 +290,23 @@ export type BaseLook = {
 }
 
 -- plotCFrame: position at the plot, facing the village center.
+-- variantSeed (usually the plot index) varies size/rotation/roof color so
+-- the village feels organic instead of copy-pasted.
 -- Returns the model and the world positions of the hatch pads (index = slot).
-function BaseBuilder.build(parent: Instance, plotCFrame: CFrame, look: BaseLook, ownerName: string?): (Model, { Vector3 })
+function BaseBuilder.build(parent: Instance, plotCFrame: CFrame, look: BaseLook, ownerName: string?, variantSeed: number?): (Model, { Vector3 })
 	local model = Instance.new("Model")
 	model.Name = "Base"
+	local rng = Random.new(variantSeed or 0)
 
-	-- Cabin sits BEHIND the plot point (away from the village), pads in front
-	local origin = plotCFrame * CFrame.Angles(0, math.pi, 0) -- door faces the village
+	-- Cabin sits BEHIND the plot point (away from the village), pads in
+	-- front. A small yaw jitter keeps the ring from looking machine-placed.
+	local jitter = math.rad(rng:NextNumber(-7, 7))
+	local origin = plotCFrame * CFrame.Angles(0, math.pi + jitter, 0) -- door faces the village
 
-	local width, _, height = buildCabinBody(model, origin, look.Tier)
-	if look.Tier >= 2 then
+	local width, _, height = buildCabinBody(model, origin, look.Tier, rng)
+	if look.Tier == 1 then
+		buildChimneySmall(model, origin, width, height) -- one chimney per home
+	else
 		buildPorch(model, origin, width)
 		buildChimney(model, origin, width, height)
 	end

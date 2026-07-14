@@ -207,6 +207,37 @@ function LandmarkBuilder.buildVillage(parent: Instance, center: Vector3, radius:
 		CFrame = CFrame.new(wellPos + Vector3.new(0, 3.5, 0)) * CFrame.Angles(0, 0, math.rad(12)),
 	})
 
+	-- STRING LIGHTS: warm fairy-light arcs strung between adjacent cabins.
+	-- Cabin positions mirror ForestGenerator's plot ring (same count/radius).
+	local cabinRingCount = 8
+	for i = 1, cabinRingCount do
+		local angleA = (i / cabinRingCount) * math.pi * 2
+		local angleB = ((i % cabinRingCount + 1) / cabinRingCount) * math.pi * 2
+		local a = center + Vector3.new(math.cos(angleA) * radius, 7.4, math.sin(angleA) * radius)
+		local b = center + Vector3.new(math.cos(angleB) * radius, 7.4, math.sin(angleB) * radius)
+		local bulbs = 7
+		for bulb = 0, bulbs do
+			local t = bulb / bulbs
+			local sag = math.sin(t * math.pi) * -1.6
+			local pos = a:Lerp(b, t) + Vector3.new(0, sag, 0)
+			-- Thin wire segment toward the next bulb
+			if bulb < bulbs then
+				local nextT = (bulb + 1) / bulbs
+				local nextPos = a:Lerp(b, nextT) + Vector3.new(0, math.sin(nextT * math.pi) * -1.6, 0)
+				makePart(village, {
+					Size = Vector3.new(0.08, 0.08, (nextPos - pos).Magnitude),
+					Color = Color3.fromRGB(60, 50, 40),
+					CanCollide = false,
+					CanQuery = false,
+					CFrame = CFrame.lookAt((pos + nextPos) / 2, nextPos),
+				})
+			end
+			local bulbColors = { Color3.fromRGB(255, 215, 130), Color3.fromRGB(255, 170, 150), Color3.fromRGB(200, 235, 160) }
+			local light = makeBall(village, Vector3.new(0.4, 0.5, 0.4), bulbColors[bulb % 3 + 1], CFrame.new(pos), Enum.Material.Neon)
+			light.CanQuery = false
+		end
+	end
+
 	-- Signpost by the spawn
 	local signPos = center + Vector3.new(5, 0, 12)
 	standingCylinder(village, 4, 0.4, DARK_WOOD, signPos + Vector3.new(0, 2, 0))
@@ -225,62 +256,194 @@ function LandmarkBuilder.buildVillage(parent: Instance, center: Vector3, radius:
 end
 
 -- ------------------------------------------------------------
--- The great treehouse: trunk, platforms, truss ladder, lookout
+-- The great treehouse: giant trunk, spiral ramp, decks, rope bridge
+-- to a satellite tree, glowing hut, lanterns, lookout with flag
 -- ------------------------------------------------------------
+
+-- A deck: wooden disc around the trunk with railing posts + rail ring
+local function buildDeck(parent: Instance, center: Vector3, height: number, radius: number)
+	standingCylinder(parent, 0.6, radius * 2, WOOD, center + Vector3.new(0, height, 0))
+	for i = 1, 12 do
+		local angle = (i / 12) * math.pi * 2
+		makePart(parent, {
+			Size = Vector3.new(0.3, 2.4, 0.3),
+			Color = DARK_WOOD,
+			CFrame = CFrame.new(center + Vector3.new(math.cos(angle) * (radius - 0.4), height + 1.4, math.sin(angle) * (radius - 0.4))),
+			CanCollide = false,
+		})
+	end
+	standingCylinder(parent, 0.25, radius * 2 - 0.5, DARK_WOOD, center + Vector3.new(0, height + 2.6, 0)).CanCollide = false
+end
+
+local function buildHangingLantern(parent: Instance, position: Vector3)
+	makePart(parent, {
+		Size = Vector3.new(0.12, 1.2, 0.12),
+		Color = Color3.fromRGB(70, 55, 40),
+		CanCollide = false,
+		CFrame = CFrame.new(position + Vector3.new(0, 0.9, 0)),
+	})
+	local lantern = makePart(parent, {
+		Size = Vector3.new(0.7, 0.9, 0.7),
+		Color = Color3.fromRGB(255, 215, 130),
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CFrame = CFrame.new(position),
+	})
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(255, 210, 140)
+	light.Brightness = 1
+	light.Range = 12
+	light.Parent = lantern
+end
+
+-- A saggy plank bridge between two elevated points, with rope rails
+local function buildRopeBridge(parent: Instance, fromPos: Vector3, toPos: Vector3)
+	local span = (toPos - fromPos)
+	local segments = math.max(5, math.floor(span.Magnitude / 2.2))
+	for i = 0, segments do
+		local t = i / segments
+		local sag = math.sin(t * math.pi) * -1.4 -- dips in the middle
+		local pos = fromPos:Lerp(toPos, t) + Vector3.new(0, sag, 0)
+		makePart(parent, {
+			Size = Vector3.new(2.6, 0.3, 1.9),
+			Color = WOOD,
+			CFrame = CFrame.lookAt(pos, pos + Vector3.new(span.X, sag * 0.2, span.Z)),
+		})
+		-- Rope rails: thin dark segments alongside every other plank
+		if i % 2 == 0 and i < segments then
+			for _, side in { -1.4, 1.4 } do
+				makePart(parent, {
+					Size = Vector3.new(0.12, 0.12, 4),
+					Color = Color3.fromRGB(120, 100, 70),
+					CanCollide = false,
+					CFrame = CFrame.lookAt(pos + Vector3.new(0, 1.1, 0), pos + Vector3.new(span.X, sag * 0.2 + 1.1, span.Z)) * CFrame.new(side, 0, 0),
+				})
+			end
+		end
+	end
+end
 
 function LandmarkBuilder.buildTreehouse(parent: Instance, position: Vector3)
 	local treehouse = Instance.new("Model")
 	treehouse.Name = "Treehouse"
 
-	-- Massive trunk + canopy
-	standingCylinder(treehouse, 30, 9, Color3.fromRGB(110, 78, 54), position + Vector3.new(0, 15, 0), Enum.Material.Wood)
-	for i, offset in { Vector3.new(0, 32, 0), Vector3.new(6, 29, 4), Vector3.new(-6, 30, -3), Vector3.new(2, 31, -6) } do
-		local size = 16 - i * 1.5
-		makeBall(treehouse, Vector3.new(size, size * 0.75, size), LEAF, CFrame.new(position + offset), Enum.Material.Grass)
+	-- Giant trunk with root flares + a huge layered canopy
+	standingCylinder(treehouse, 34, 11, Color3.fromRGB(110, 78, 54), position + Vector3.new(0, 17, 0), Enum.Material.Wood)
+	for i = 1, 6 do
+		local angle = (i / 6) * math.pi * 2
+		makeBall(treehouse, Vector3.new(4, 3, 6), Color3.fromRGB(100, 70, 48),
+			CFrame.new(position + Vector3.new(math.cos(angle) * 5.5, 1, math.sin(angle) * 5.5)) * CFrame.Angles(0, -angle, math.rad(18)),
+			Enum.Material.Wood)
+	end
+	for i, offset in {
+		Vector3.new(0, 37, 0), Vector3.new(8, 33, 5), Vector3.new(-8, 34, -4),
+		Vector3.new(3, 35, -8), Vector3.new(-5, 33, 7), Vector3.new(9, 32, -6),
+	} do
+		local size = 19 - i * 1.4
+		makeBall(treehouse, Vector3.new(size, size * 0.7, size), LEAF, CFrame.new(position + offset), Enum.Material.Grass)
 	end
 
-	-- Platform helper: a wooden disc around the trunk with railing posts
-	local function platform(height: number, radius: number)
-		standingCylinder(treehouse, 0.6, radius * 2, WOOD, position + Vector3.new(0, height, 0))
-		for i = 1, 10 do
-			local angle = (i / 10) * math.pi * 2
-			makePart(treehouse, {
-				Size = Vector3.new(0.3, 2.4, 0.3),
-				Color = DARK_WOOD,
-				CFrame = CFrame.new(position + Vector3.new(math.cos(angle) * (radius - 0.4), height + 1.4, math.sin(angle) * (radius - 0.4))),
-			})
-		end
-		-- Rail ring (thin, sits on the posts)
-		standingCylinder(treehouse, 0.25, radius * 2 - 0.5, DARK_WOOD, position + Vector3.new(0, height + 2.6, 0))
+	-- SPIRAL RAMP: shallow plank steps winding up the trunk to deck one
+	for i = 0, 26 do
+		local angle = i * 0.34
+		local height = 0.6 + i * 0.45
+		local pos = position + Vector3.new(math.cos(angle) * 8.6, height, math.sin(angle) * 8.6)
+		makePart(treehouse, {
+			Size = Vector3.new(4.6, 0.4, 2.4),
+			Color = i % 2 == 0 and WOOD or DARK_WOOD,
+			CFrame = CFrame.new(pos) * CFrame.Angles(0, -angle, 0),
+		})
 	end
 
-	platform(10, 8.5)
-	platform(18, 7.5)
-	platform(26, 6) -- the lookout
+	buildDeck(treehouse, position, 12.5, 9.5)
+	buildDeck(treehouse, position, 21, 8.5)
+	buildDeck(treehouse, position, 29, 6.5) -- the lookout
 
-	-- Climbable truss ladder up the south face, ground to lookout
+	-- Cozy hut on deck two with GLOWING windows and a little roof
+	local hutOrigin = CFrame.new(position + Vector3.new(3.5, 21.3, 3.5)) * CFrame.Angles(0, math.rad(-135), 0)
+	makePart(treehouse, {
+		Size = Vector3.new(5.5, 4.2, 4.5),
+		Color = WOOD,
+		CFrame = hutOrigin * CFrame.new(0, 2.1, 0),
+	})
+	for _, offset in { Vector3.new(-1.4, 2.6, -2.2), Vector3.new(1.4, 2.6, -2.2) } do
+		makePart(treehouse, {
+			Size = Vector3.new(1.2, 1.2, 0.25),
+			Color = Color3.fromRGB(255, 235, 170),
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			CFrame = hutOrigin * CFrame.new(offset),
+		})
+	end
+	makePart(treehouse, {
+		Size = Vector3.new(6.3, 0.35, 5.3),
+		Color = Color3.fromRGB(150, 75, 55),
+		Material = Enum.Material.SmoothPlastic,
+		CFrame = hutOrigin * CFrame.new(0, 4.5, 0) * CFrame.Angles(math.rad(8), 0, 0),
+	})
+	local hutGlow = makePart(treehouse, {
+		Size = Vector3.new(0.4, 0.4, 0.4),
+		Transparency = 1,
+		CanCollide = false,
+		CanQuery = false,
+		CFrame = hutOrigin * CFrame.new(0, 2.4, 0),
+	})
+	local hutLight = Instance.new("PointLight")
+	hutLight.Color = Color3.fromRGB(255, 200, 130)
+	hutLight.Brightness = 1.6
+	hutLight.Range = 16
+	hutLight.Parent = hutGlow
+
+	-- ROPE BRIDGE from deck one out to a satellite tree platform
+	local satellitePos = position + Vector3.new(22, 0, 10)
+	standingCylinder(treehouse, 14, 2.2, Color3.fromRGB(115, 82, 58), satellitePos + Vector3.new(0, 7, 0), Enum.Material.Wood)
+	for _, offset in { Vector3.new(0, 16, 0), Vector3.new(2, 14.5, 1.5), Vector3.new(-1.5, 15, -1.5) } do
+		makeBall(treehouse, Vector3.new(8, 6, 8), LEAF, CFrame.new(satellitePos + offset), Enum.Material.Grass)
+	end
+	buildDeck(treehouse, satellitePos, 12.2, 4.5)
+	buildRopeBridge(treehouse,
+		position + Vector3.new(9, 13, 4.2),
+		satellitePos + Vector3.new(-4, 12.9, -1))
+
+	-- Rope ladder (climbable truss dressed with side ropes) up the south face
 	local truss = Instance.new("TrussPart")
-	truss.Size = Vector3.new(2, 26.5, 2)
-	truss.CFrame = CFrame.new(position + Vector3.new(0, 13.25, 5.6))
+	truss.Size = Vector3.new(2, 29, 2)
+	truss.CFrame = CFrame.new(position + Vector3.new(0, 14.5, 10.6))
 	truss.Anchored = true
 	truss.BrickColor = BrickColor.new("Dark orange")
 	truss.Parent = treehouse
-
-	-- A hanging lantern per platform for dusk charm
-	for _, height in { 12.5, 20.5, 28.5 } do
-		local lantern = makePart(treehouse, {
-			Size = Vector3.new(0.7, 0.9, 0.7),
-			Color = Color3.fromRGB(255, 215, 130),
-			Material = Enum.Material.Neon,
+	for _, side in { -1.1, 1.1 } do
+		makePart(treehouse, {
+			Size = Vector3.new(0.15, 29, 0.15),
+			Color = Color3.fromRGB(120, 100, 70),
 			CanCollide = false,
-			CFrame = CFrame.new(position + Vector3.new(6.5, height, 0)),
+			CFrame = CFrame.new(position + Vector3.new(side, 14.5, 10.6)),
 		})
-		local light = Instance.new("PointLight")
-		light.Color = Color3.fromRGB(255, 210, 140)
-		light.Brightness = 1
-		light.Range = 12
-		light.Parent = lantern
 	end
+
+	-- TOP LOOKOUT: flag pole + waving banner + hanging lanterns all around
+	makePart(treehouse, {
+		Size = Vector3.new(0.3, 7, 0.3),
+		Color = DARK_WOOD,
+		CFrame = CFrame.new(position + Vector3.new(0, 33, 0)),
+	})
+	makePart(treehouse, {
+		Size = Vector3.new(3.4, 1.8, 0.15),
+		Color = Color3.fromRGB(90, 200, 120),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CFrame = CFrame.new(position + Vector3.new(1.9, 35.5, 0)),
+	})
+	for _, spot in {
+		position + Vector3.new(8.6, 15.6, 0), position + Vector3.new(-8.6, 15.6, 0),
+		position + Vector3.new(0, 24, 7.6), position + Vector3.new(0, 24, -7.6),
+		position + Vector3.new(5.6, 32, 0), position + Vector3.new(-5.6, 32, 0),
+	} do
+		buildHangingLantern(treehouse, spot)
+	end
+
+	-- TODO(easy win later): a zipline from the lookout to the pond dock —
+	-- a long thin rope part + a client-side seat tween along it.
 
 	treehouse.Parent = parent
 end

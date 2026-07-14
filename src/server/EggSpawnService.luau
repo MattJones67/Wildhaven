@@ -24,9 +24,10 @@ local GameConfig = require(ReplicatedStorage.GameConfig)
 local Remotes = require(ReplicatedStorage.Remotes)
 local RollUtil = require(ReplicatedStorage.RollUtil)
 
-local BaseUpgradeService = require(script.Parent.BaseUpgradeService)
 local DataService = require(script.Parent.DataService)
 local ForestGenerator = require(script.Parent.ForestGenerator)
+local GoalService = require(script.Parent.GoalService)
+local PlayerStats = require(script.Parent.PlayerStats)
 
 local SPAWNING = GameConfig.EggSpawning
 
@@ -47,7 +48,7 @@ function EggSpawnService.pushInventory(player: Player)
 	end
 	Remotes.EggInventoryUpdate:FireClient(player, {
 		Inventory = data.EggInventory,
-		Capacity = BaseUpgradeService.getEggCapacity(player),
+		Capacity = PlayerStats.getEggCapacity(player),
 	})
 end
 
@@ -82,8 +83,8 @@ local function onPromptTriggered(worldEgg: WorldEgg, player: Player)
 		return
 	end
 
-	-- SECURITY CHECK 4: capacity (upgradeable via EggCapacity)
-	local capacity = BaseUpgradeService.getEggCapacity(player)
+	-- SECURITY CHECK 4: capacity (upgrades + rebirth bonus)
+	local capacity = PlayerStats.getEggCapacity(player)
 	if #data.EggInventory >= capacity then
 		Remotes.Notify:FireClient(player, { Text = "Egg satchel full!", Kind = "Error" })
 		return
@@ -99,6 +100,7 @@ local function onPromptTriggered(worldEgg: WorldEgg, player: Player)
 
 	EggSpawnService.pushInventory(player)
 	Remotes.Notify:FireClient(player, { Text = "+1 " .. worldEgg.EggType, Kind = "Pickup", EggType = worldEgg.EggType })
+	GoalService.bump(player, "EggsCollected")
 end
 
 local function spawnOneEgg(rng: Random)
@@ -121,9 +123,10 @@ local function spawnOneEgg(rng: Random)
 	end
 
 	local eggType = RollUtil.rollEggType(rng)
-	local model = EggModels.create(eggType)
+	-- The big glowing beacon version — visible across the island
+	local model = EggModels.createWorldEgg(eggType)
 	model:PivotTo(CFrame.new(points[pointIndex]) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0))
-	CollectionService:AddTag(model, "WorldEgg") -- client bobs/spins tagged eggs
+	CollectionService:AddTag(model, "WorldEgg") -- client floats/bobs/spins tagged eggs
 
 	local worldEgg: WorldEgg = { Model = model, EggType = eggType, PointIndex = pointIndex }
 
