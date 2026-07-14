@@ -39,10 +39,12 @@ local MUTATION_LABELS = {
 local UIController = {}
 
 -- Live UI state (server-pushed; the render loop eases toward it)
+-- (patch 5: "coins" vars now mean SILVER; gold is its own smaller counter)
 local displayedCoins = 0
 local targetCoins = 0
-local luckSecondsLeft = 0
-local luckMultiplier = 1
+local targetGold = 0
+local potionCounts: { [string]: number } = {}
+local activeBuffs: { { Kind: string, Key: string, Mult: number, SecondsLeft: number } } = {}
 local eggCounts: { [string]: number } = {}
 local eggTotal = 0
 local eggCapacity = 3
@@ -56,7 +58,9 @@ local autoHatchEnabled = false
 
 local handlersRef: {
 	onStartHatch: (string) -> (),
-	onBuyLuck: () -> (),
+	onBuyPotion: (string) -> (),
+	onUsePotion: (string) -> (),
+	onRedeemCode: (string) -> (),
 	onBuyUpgrade: (string) -> (),
 	onToggleEquip: (number) -> (),
 	onToggleAutoHatch: () -> (),
@@ -65,12 +69,18 @@ local handlersRef: {
 -- Instances
 local coinsLabel: TextLabel
 local coinsScale: UIScale
+local goldLabel: TextLabel
+local goldScale: UIScale
 local incomeLabel: TextLabel
 local eggsButton: TextButton
 local eggsCountLabel: TextLabel
-local luckButton: TextButton
-local luckTitleLabel: TextLabel
-local luckSubLabel: TextLabel
+local potionButton: TextButton
+local potionPanel: Frame
+local potionRows: Frame
+local buffChipsFrame: Frame
+local vignette: UIStroke
+local codeBox: TextBox
+local codeResultLabel: TextLabel
 local collectionGrid: ScrollingFrame
 local collectionSlotsLabel: TextLabel
 local autoHatchButton: TextButton
@@ -195,24 +205,36 @@ end
 local function buildCoinsCorner(gui: ScreenGui)
 	local frame = Instance.new("Frame")
 	frame.Position = UDim2.new(0, 12, 0, 12)
-	frame.Size = UDim2.new(0, 230, 0, 96)
+	frame.Size = UDim2.new(0, 230, 0, 128) -- taller: two currencies now
 	frame.BackgroundColor3 = PANEL_COLOR
 	frame.BackgroundTransparency = 0.25
 	frame.Parent = gui
 	round(frame, 14)
 
+	-- SILVER: the everyday balance (the old coin counter)
 	coinsLabel = makeLabel(frame, {
 		Position = UDim2.new(0, 12, 0, 6),
-		Size = UDim2.new(1, -24, 0, 44),
+		Size = UDim2.new(1, -24, 0, 40),
 		Text = "🪙 0",
-		TextColor3 = GOLD,
+		TextColor3 = Color3.fromRGB(210, 215, 225), -- silver, not gold, now
 		TextXAlignment = Enum.TextXAlignment.Left,
 	})
 	coinsScale = Instance.new("UIScale")
 	coinsScale.Parent = coinsLabel
 
+	-- GOLD: rare and shiny — smaller line, richer color
+	goldLabel = makeLabel(frame, {
+		Position = UDim2.new(0, 12, 0, 48),
+		Size = UDim2.new(1, -24, 0, 32),
+		Text = "🌕 0",
+		TextColor3 = GOLD,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	goldScale = Instance.new("UIScale")
+	goldScale.Parent = goldLabel
+
 	incomeLabel = makeLabel(frame, {
-		Position = UDim2.new(0, 12, 0, 54),
+		Position = UDim2.new(0, 12, 0, 86),
 		Size = UDim2.new(1, -24, 0, 32),
 		Text = "+0 🪙/s",
 		TextColor3 = GREEN,
@@ -249,28 +271,17 @@ local function buildActionButtons(gui: ScreenGui, eggPanel: Frame, upgradePanel:
 		togglePanel(eggPanel)
 	end)
 
-	luckButton = makeButton(gui, {
+	-- PATCH 5: the x2 Luck button is GONE — this opens the potion bag/shop
+	potionButton = makeButton(gui, {
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 205, 1, -20),
 		Size = UDim2.new(0, 160, 0, 88),
-		BackgroundColor3 = Color3.fromRGB(90, 170, 220),
-		Text = "",
+		BackgroundColor3 = Color3.fromRGB(150, 110, 200),
+		Text = "🧪 POTIONS",
 	})
-	stroke(luckButton, Color3.fromRGB(45, 100, 140), 3)
-	luckTitleLabel = makeLabel(luckButton, {
-		Position = UDim2.new(0, 4, 0, 8),
-		Size = UDim2.new(1, -8, 0, 42),
-		Text = "🍀 LUCK x" .. GameConfig.LuckBoost.Multiplier,
-		TextColor3 = Color3.new(1, 1, 1),
-	})
-	luckSubLabel = makeLabel(luckButton, {
-		Position = UDim2.new(0, 4, 0, 54),
-		Size = UDim2.new(1, -8, 0, 26),
-		Text = comma(GameConfig.LuckBoost.Cost) .. " 🪙",
-		TextColor3 = Color3.fromRGB(230, 245, 255),
-	})
-	luckButton.Activated:Connect(function()
-		handlersRef.onBuyLuck()
+	stroke(potionButton, Color3.fromRGB(90, 60, 130), 3)
+	potionButton.Activated:Connect(function()
+		togglePanel(potionPanel)
 	end)
 
 	local baseButton = makeButton(gui, {
@@ -513,10 +524,189 @@ local function refreshUpgradeRows()
 		else
 			local price = upgrade.Prices[level + 1]
 			refs.Effect.Text = describeValue(upgrade, level) .. " → " .. describeValue(upgrade, level + 1)
-			refs.Button.Text = comma(price) .. " 🪙"
-			-- Affordability shown live: gold when buyable, dimmed when not
-			refs.Button.BackgroundColor3 = targetCoins >= price and GOLD or Color3.fromRGB(150, 135, 95)
+			-- PATCH 5 currency split: Aesthetic = GOLD 🌕, functional = SILVER 🪙
+			local isGoldPriced = upgrade.Kind == "Aesthetic"
+			refs.Button.Text = comma(price) .. (isGoldPriced and " 🌕" or " 🪙")
+			local canAfford = isGoldPriced and targetGold >= price or (not isGoldPriced and targetCoins >= price)
+			refs.Button.BackgroundColor3 = canAfford and GOLD or Color3.fromRGB(150, 135, 95)
 		end
+	end
+end
+
+-- ------------------------------------------------------------
+-- Potion panel (patch 5): your bag on top, the silver shop below
+-- ------------------------------------------------------------
+
+function UIController.refreshPotionRows()
+	if not potionRows then
+		return
+	end
+	for _, child in potionRows:GetChildren() do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+	local order = 0
+	local function addRow(potion, owned: number, isShop: boolean)
+		order += 1
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -8, 0, 56)
+		row.BackgroundColor3 = ROW_COLOR
+		row.LayoutOrder = order
+		row.Parent = potionRows
+		round(row, 10)
+		stroke(row, potion.Color, 2)
+		makeLabel(row, {
+			Position = UDim2.new(0, 10, 0, 6),
+			Size = UDim2.new(1, -140, 0, 26),
+			Text = potion.Emoji .. " " .. potion.Title .. (isShop and "" or ("  x" .. owned)),
+			TextColor3 = potion.Color,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+		-- Hatch potions multiply hatch TIME, so describe them as "% faster"
+		local effect
+		if potion.Kind == "Luck" then
+			effect = "x" .. tostring(potion.Mult) .. " luck"
+		else
+			effect = math.floor((1 - potion.Mult) * 100 + 0.5) .. "% faster hatches"
+		end
+		makeLabel(row, {
+			Position = UDim2.new(0, 10, 0, 32),
+			Size = UDim2.new(1, -140, 0, 18),
+			Text = ("%s for %d:%02d"):format(effect, math.floor(potion.DurationSeconds / 60), potion.DurationSeconds % 60),
+			TextColor3 = Color3.fromRGB(190, 198, 210),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+		local actionButton = makeButton(row, {
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -8, 0.5, 0),
+			Size = UDim2.new(0, 116, 0, 40),
+			BackgroundColor3 = isShop and GOLD or GREEN,
+			Text = isShop and (comma(potion.SilverCost) .. " 🪙") or "DRINK",
+		})
+		actionButton.Activated:Connect(function()
+			if isShop then
+				handlersRef.onBuyPotion(potion.Key)
+			else
+				handlersRef.onUsePotion(potion.Key)
+			end
+		end)
+	end
+
+	-- Your bag first (anything owned, shop or not)
+	for _, potion in GameConfig.Potions do
+		if (potionCounts[potion.Key] or 0) > 0 then
+			addRow(potion, potionCounts[potion.Key], false)
+		end
+	end
+	-- Then the silver shop (basic tiers only; Majors come from the trader)
+	order += 1
+	local header = makeLabel(potionRows, {
+		Size = UDim2.new(1, -8, 0, 24),
+		Text = "— Shop (silver) · rarer potions: Lucky Blocks & the Trader —",
+		TextColor3 = Color3.fromRGB(160, 168, 180),
+		LayoutOrder = order,
+	})
+	header.TextScaled = true
+	for _, potion in GameConfig.Potions do
+		if potion.SilverCost then
+			addRow(potion, 0, true)
+		end
+	end
+end
+
+local function buildPotionPanel(gui: ScreenGui)
+	potionPanel = makePanel(gui, "🧪 Potions")
+	potionRows = Instance.new("ScrollingFrame")
+	potionRows.Position = UDim2.new(0, 12, 0, 52)
+	potionRows.Size = UDim2.new(1, -24, 1, -64)
+	potionRows.BackgroundTransparency = 1
+	potionRows.BorderSizePixel = 0
+	potionRows.ScrollBarThickness = 6
+	potionRows.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	potionRows.CanvasSize = UDim2.new(0, 0, 0, 0)
+	potionRows.Parent = potionPanel
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 6)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = potionRows
+end
+
+-- ------------------------------------------------------------
+-- Codes panel (patch 5): the gold faucet with a text box
+-- ------------------------------------------------------------
+
+local function buildCodesUI(gui: ScreenGui)
+	local toggle = makeButton(gui, {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -12, 0, 76),
+		Size = UDim2.new(0, 150, 0, 44),
+		BackgroundColor3 = Color3.fromRGB(120, 160, 120),
+		Text = "🎁 Codes",
+	})
+	stroke(toggle, Color3.fromRGB(70, 100, 70), 3)
+
+	local panel = Instance.new("Frame")
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.new(0.5, 0, 0.35, 0)
+	panel.Size = UDim2.new(0, 340, 0, 190)
+	panel.BackgroundColor3 = PANEL_COLOR
+	panel.Visible = false
+	panel.Parent = gui
+	round(panel, 14)
+	table.insert(panels, panel)
+
+	makeLabel(panel, {
+		Position = UDim2.new(0, 14, 0, 8),
+		Size = UDim2.new(1, -28, 0, 30),
+		Text = "🎁 Redeem a Code",
+		TextColor3 = Color3.new(1, 1, 1),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+
+	codeBox = Instance.new("TextBox")
+	codeBox.Position = UDim2.new(0, 14, 0, 48)
+	codeBox.Size = UDim2.new(1, -28, 0, 44)
+	codeBox.BackgroundColor3 = Color3.fromRGB(28, 31, 38)
+	codeBox.Font = Enum.Font.FredokaOne
+	codeBox.TextSize = 22
+	codeBox.TextColor3 = Color3.new(1, 1, 1)
+	codeBox.PlaceholderText = "TYPE CODE HERE"
+	codeBox.PlaceholderColor3 = Color3.fromRGB(120, 126, 138)
+	codeBox.Text = ""
+	codeBox.ClearTextOnFocus = false
+	codeBox.Parent = panel
+	round(codeBox, 10)
+
+	local redeemButton = makeButton(panel, {
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 102),
+		Size = UDim2.new(0, 180, 0, 44),
+		BackgroundColor3 = GREEN,
+		Text = "REDEEM",
+	})
+	redeemButton.Activated:Connect(function()
+		handlersRef.onRedeemCode(codeBox.Text)
+	end)
+
+	codeResultLabel = makeLabel(panel, {
+		Position = UDim2.new(0, 14, 1, -36),
+		Size = UDim2.new(1, -28, 0, 26),
+		Text = "",
+		TextColor3 = Color3.fromRGB(190, 198, 210),
+	})
+
+	toggle.Activated:Connect(function()
+		togglePanel(panel)
+	end)
+end
+
+-- Called by init.client with each redeem outcome
+function UIController.setCodeResult(text: string, success: boolean)
+	codeResultLabel.Text = text
+	codeResultLabel.TextColor3 = success and Color3.fromRGB(150, 255, 170) or Color3.fromRGB(255, 130, 120)
+	if success then
+		codeBox.Text = ""
 	end
 end
 
@@ -749,6 +939,42 @@ end
 -- Render loop
 -- ------------------------------------------------------------
 
+-- Buff chips: "🍀 x1.5 3:21" pills under the currency corner, plus a
+-- colored screen-edge vignette while anything is active (patch 5 juice)
+local function refreshBuffChips()
+	for _, child in buffChipsFrame:GetChildren() do
+		if child:IsA("TextLabel") then
+			child:Destroy()
+		end
+	end
+	local vignetteColor = nil
+	for order, buff in activeBuffs do
+		local potion = GameConfig.PotionByKey[buff.Key]
+		local minutes = math.floor(buff.SecondsLeft / 60)
+		local seconds = buff.SecondsLeft % 60
+		local effect = buff.Kind == "Hatch"
+			and ("+" .. math.floor((1 - buff.Mult) * 100 + 0.5) .. "%")
+			or ("x" .. tostring(buff.Mult))
+		local chip = makeLabel(buffChipsFrame, {
+			Size = UDim2.new(0, 118, 0, 28),
+			Text = ("%s %s %d:%02d"):format(potion and potion.Emoji or "✨", effect, minutes, seconds),
+			TextColor3 = potion and potion.Color or Color3.new(1, 1, 1),
+			BackgroundColor3 = Color3.fromRGB(30, 34, 42),
+			BackgroundTransparency = 0.25,
+			LayoutOrder = order,
+		})
+		round(chip, 8)
+		vignetteColor = vignetteColor or (potion and potion.Color)
+	end
+	buffChipsFrame.Visible = #activeBuffs > 0
+	if vignetteColor then
+		vignette.Color = vignetteColor
+		vignette.Transparency = 0.65
+	else
+		vignette.Transparency = 1
+	end
+end
+
 local function onHeartbeat(dt: number)
 	if displayedCoins ~= targetCoins then
 		local step = (targetCoins - displayedCoins) * math.min(dt * 7, 1)
@@ -758,17 +984,6 @@ local function onHeartbeat(dt: number)
 		end
 		coinsLabel.Text = "🪙 " .. comma(displayedCoins)
 	end
-
-	if luckSecondsLeft > 0 then
-		luckSecondsLeft = math.max(0, luckSecondsLeft - dt)
-		luckButton.BackgroundColor3 = Color3.fromRGB(60, 200, 130)
-		luckTitleLabel.Text = "🍀 LUCK x" .. luckMultiplier
-		luckSubLabel.Text = math.ceil(luckSecondsLeft) .. "s left"
-	else
-		luckButton.BackgroundColor3 = Color3.fromRGB(90, 170, 220)
-		luckTitleLabel.Text = "🍀 LUCK x" .. GameConfig.LuckBoost.Multiplier
-		luckSubLabel.Text = comma(GameConfig.LuckBoost.Cost) .. " 🪙"
-	end
 end
 
 -- ------------------------------------------------------------
@@ -776,27 +991,43 @@ end
 -- ------------------------------------------------------------
 
 function UIController.setState(state: { [string]: any })
-	if state.Coins ~= nil and state.Coins ~= targetCoins then
-		local gained = state.Coins > targetCoins
-		targetCoins = state.Coins
+	if state.Silver ~= nil and state.Silver ~= targetCoins then
+		local gained = state.Silver > targetCoins
+		targetCoins = state.Silver
 		if gained then
 			coinsScale.Scale = 1.18
 			TweenService:Create(coinsScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 			Sounds.coinBlip()
 		end
-		-- Coins changed -> re-evaluate every price button (part of the
+		-- Silver changed -> re-evaluate every price button (part of the
 		-- "always render from authoritative state" bug fix)
+		refreshUpgradeRows()
+	end
+	if state.Gold ~= nil and state.Gold ~= targetGold then
+		local gained = state.Gold > targetGold
+		targetGold = state.Gold
+		goldLabel.Text = "🌕 " .. comma(targetGold)
+		if gained then
+			-- Gold is rare: bigger pop, richer sound
+			goldScale.Scale = 1.35
+			TweenService:Create(goldScale, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+			Sounds.goldGain()
+		end
 		refreshUpgradeRows()
 	end
 	if state.IncomePerSecond ~= nil then
 		incomeLabel.Text = "+" .. comma(state.IncomePerSecond) .. " 🪙/s"
 	end
-	if state.LuckSecondsLeft ~= nil then
-		luckSecondsLeft = state.LuckSecondsLeft
+	if state.Buffs ~= nil then
+		activeBuffs = state.Buffs
+		refreshBuffChips()
 	end
-	if state.LuckMultiplier ~= nil and state.LuckMultiplier > 1 then
-		luckMultiplier = state.LuckMultiplier
-	end
+end
+
+-- Potion inventory changed (bought / used / rewarded)
+function UIController.setPotions(potions: { [string]: number })
+	potionCounts = potions or {}
+	UIController.refreshPotionRows()
 end
 
 function UIController.setEggInventory(inventory: { string }, capacity: number)
@@ -887,7 +1118,7 @@ function UIController.showError(message: string)
 	UIController.showToast(message, "Error")
 end
 
-function UIController.init(handlers: { onStartHatch: (string) -> (), onBuyLuck: () -> (), onBuyUpgrade: (string) -> () })
+function UIController.init(handlers)
 	handlersRef = handlers
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
@@ -898,11 +1129,39 @@ function UIController.init(handlers: { onStartHatch: (string) -> (), onBuyLuck: 
 	buildCoinsCorner(gui)
 	local eggPanel = buildEggPanel(gui)
 	local upgradePanel = buildUpgradePanel(gui)
+	buildPotionPanel(gui) -- before the action bar (its button toggles this)
 	buildCollectionUI(gui)
 	buildActionButtons(gui, eggPanel, upgradePanel)
+	buildCodesUI(gui)
 	buildToasts(gui)
+
+	-- Buff chips row under the currency corner
+	buffChipsFrame = Instance.new("Frame")
+	buffChipsFrame.Position = UDim2.new(0, 12, 0, 250)
+	buffChipsFrame.Size = UDim2.new(0, 260, 0, 30)
+	buffChipsFrame.BackgroundTransparency = 1
+	buffChipsFrame.Visible = false
+	buffChipsFrame.Parent = gui
+	local chipsLayout = Instance.new("UIListLayout")
+	chipsLayout.FillDirection = Enum.FillDirection.Horizontal
+	chipsLayout.Padding = UDim.new(0, 6)
+	chipsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	chipsLayout.Parent = buffChipsFrame
+
+	-- Screen-edge vignette while a buff runs (color = the potion's)
+	local vignetteFrame = Instance.new("Frame")
+	vignetteFrame.Size = UDim2.new(1, 0, 1, 0)
+	vignetteFrame.BackgroundTransparency = 1
+	vignetteFrame.ZIndex = 0
+	vignetteFrame.Parent = gui
+	vignette = Instance.new("UIStroke")
+	vignette.Thickness = 7
+	vignette.Transparency = 1
+	vignette.Parent = vignetteFrame
+
 	refreshEggRows()
 	refreshUpgradeRows()
+	UIController.refreshPotionRows()
 
 	gui.Parent = playerGui
 	RunService.Heartbeat:Connect(onHeartbeat)

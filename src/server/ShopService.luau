@@ -1,12 +1,17 @@
 --[[
-	ShopService — handles Luck Boost purchases (and future shop items).
+	ShopService — patch 5 rewrite. The old x2 Luck Boost button is GONE;
+	this is now the POTION shop and the potion-drinking service:
 
-	Same server-authoritative pattern as HatchService: validate, deduct,
-	apply. The boost itself is just a timestamp (LuckEndsAt) in the player's
-	data — DataService.getLuckMultiplier() reads it, so expiry is automatic
-	and there's nothing to clean up.
+	  BuyPotion(key)  -> SILVER purchase into data.Potions (shop sells only
+	                     potions with a SilverCost; Major tiers come from
+	                     the Wandering Trader and Lucky Blocks)
+	  UsePotion(key)  -> consumes one, starts its timed buff in data.Buffs
 
-	TODO (later passes): gamepasses / monetisation hooks would live here.
+	Stacking rule (GameConfig.Potions comment): ONE active buff per Kind.
+	Buff expiry is a timestamp — PlayerStats reads it live, nothing to clean.
+
+	SECURITY: server checks affordability, ownership, and the stacking rule;
+	both remotes are rate-limited.
 ]]
 
 local Players = game:GetService("Players")
@@ -20,51 +25,91 @@ local IncomeService = require(script.Parent.IncomeService)
 
 local ShopService = {}
 
--- SECURITY: rate-limit purchases against remote spam
-local lastBuyAt: { [Player]: number } = {}
+local lastActionAt: { [Player]: number } = {}
 
-local function onBuyLuckBoost(player: Player)
-	-- SECURITY CHECK 1: rate limit
+local function rateLimited(player: Player): boolean
 	local now = os.clock()
-	local last = lastBuyAt[player]
+	local last = lastActionAt[player]
 	if last and now - last < GameConfig.RateLimits.BuyCooldownSeconds then
+		return true
+	end
+	lastActionAt[player] = now
+	return false
+end
+
+local function pushPotions(player: Player)
+	local data = DataService.get(player)
+	if data then
+		Remotes.PotionsUpdate:FireClient(player, { Potions = data.Potions })
+	end
+end
+
+local function onBuyPotion(player: Player, key: any)
+	if rateLimited(player) then
 		return { Success = false, Error = "Too fast!" }
 	end
-	lastBuyAt[player] = now
-
 	local data = DataService.get(player)
 	if not data then
 		return { Success = false, Error = "Still loading..." }
 	end
-
-	-- No stacking: one boost at a time keeps the economy predictable
-	if os.time() < data.LuckEndsAt then
-		return { Success = false, Error = "Boost already active!" }
+	-- SECURITY: real potion, actually sold for silver
+	local potion = typeof(key) == "string" and GameConfig.PotionByKey[key] or nil
+	if not potion or not potion.SilverCost then
+		return { Success = false, Error = "Not sold here!" }
+	end
+	-- SECURITY: server-side affordability
+	if data.Silver < potion.SilverCost then
+		return { Success = false, Error = "Not enough silver!" }
 	end
 
-	-- SECURITY CHECK 2: server-side affordability
-	local cost = GameConfig.LuckBoost.Cost
-	if data.Coins < cost then
-		return { Success = false, Error = "Not enough coins!" }
-	end
+	data.Silver -= potion.SilverCost
+	data.Potions[key] = (data.Potions[key] or 0) + 1
 
-	data.Coins -= cost
-	data.LuckEndsAt = os.time() + GameConfig.LuckBoost.DurationSeconds
-
+	pushPotions(player)
 	IncomeService.pushState(player)
+	return { Success = true, Silver = math.floor(data.Silver) }
+end
 
-	return {
-		Success = true,
-		Coins = math.floor(data.Coins),
-		SecondsLeft = GameConfig.LuckBoost.DurationSeconds,
+local function onUsePotion(player: Player, key: any)
+	if rateLimited(player) then
+		return { Success = false, Error = "Too fast!" }
+	end
+	local data = DataService.get(player)
+	if not data then
+		return { Success = false, Error = "Still loading..." }
+	end
+	local potion = typeof(key) == "string" and GameConfig.PotionByKey[key] or nil
+	if not potion then
+		return { Success = false, Error = "Unknown potion" }
+	end
+	-- SECURITY: must actually own one
+	if (data.Potions[key] or 0) < 1 then
+		return { Success = false, Error = "You don't have that potion!" }
+	end
+	-- Stacking rule: one buff per Kind at a time
+	local active = data.Buffs[potion.Kind]
+	if active and os.time() < active.EndsAt then
+		return { Success = false, Error = "A " .. potion.Kind:lower() .. " buff is already active!" }
+	end
+
+	data.Potions[key] -= 1
+	data.Buffs[potion.Kind] = {
+		Key = key,
+		Mult = potion.Mult,
+		EndsAt = os.time() + potion.DurationSeconds,
 	}
+
+	pushPotions(player)
+	IncomeService.pushState(player) -- luck/hatch numbers change right away
+	return { Success = true, Kind = potion.Kind, SecondsLeft = potion.DurationSeconds }
 end
 
 function ShopService.init()
-	Remotes.BuyLuckBoost.OnServerInvoke = onBuyLuckBoost
+	Remotes.BuyPotion.OnServerInvoke = onBuyPotion
+	Remotes.UsePotion.OnServerInvoke = onUsePotion
 
 	Players.PlayerRemoving:Connect(function(player)
-		lastBuyAt[player] = nil
+		lastActionAt[player] = nil
 	end)
 end
 

@@ -210,7 +210,7 @@ end
 
 local function buildDex()
 	indexButton = makeButton(gui, {
-		Position = UDim2.new(0, 12, 0, 114),
+		Position = UDim2.new(0, 12, 0, 148), -- below the taller 2-currency corner
 		Size = UDim2.new(0, 140, 0, 44),
 		BackgroundColor3 = Color3.fromRGB(120, 150, 100),
 		Text = "📖 0%",
@@ -513,9 +513,10 @@ local function refreshClassUI()
 		classRollButton.Text = "🎲 FREE DAILY ROLL!"
 		classRollButton.BackgroundColor3 = Color3.fromRGB(95, 200, 90)
 	else
+		-- PATCH 5: extra re-rolls cost GOLD now
 		local hours = math.floor(nextFreeRollIn / 3600)
 		local minutes = math.floor((nextFreeRollIn % 3600) / 60)
-		classRollButton.Text = ("🎲 %s 🪙  (free in %dh %dm)"):format(comma(GameConfig.Classes.RerollCost), hours, minutes)
+		classRollButton.Text = ("🎲 %d 🌕  (free in %dh %dm)"):format(GameConfig.Classes.RerollCostGold, hours, minutes)
 		classRollButton.BackgroundColor3 = Color3.fromRGB(90, 140, 200)
 	end
 end
@@ -523,7 +524,7 @@ end
 local function buildClass()
 	-- Chip under the 📖 index button
 	classChip = makeButton(gui, {
-		Position = UDim2.new(0, 12, 0, 164),
+		Position = UDim2.new(0, 12, 0, 198),
 		Size = UDim2.new(0, 140, 0, 44),
 		BackgroundColor3 = Color3.fromRGB(160, 110, 190),
 		Text = "🎭 …",

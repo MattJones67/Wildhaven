@@ -68,6 +68,28 @@ function Sounds.hatchPop()
 	play(ASSETS.Blip, 0.9, 0.4)
 end
 
+-- GOLD gained — rare, so it gets a richer two-tone shimmer (patch 5)
+function Sounds.goldGain()
+	play(ASSETS.Blip, 1.2, 0.4)
+	task.delay(0.09, function()
+		play(ASSETS.Blip, 1.8, 0.45)
+	end)
+	task.delay(0.18, function()
+		play(ASSETS.Blip, 2.4, 0.35)
+	end)
+end
+
+-- Glug-glug-whoosh: drinking a potion (patch 5)
+function Sounds.potionDrink()
+	play(ASSETS.Blip, 0.7, 0.3)
+	task.delay(0.12, function()
+		play(ASSETS.Blip, 0.9, 0.3)
+	end)
+	task.delay(0.24, function()
+		play(ASSETS.Swoosh, 1.4, 0.45)
+	end)
+end
+
 -- Pet zips onto (or off) the team
 function Sounds.equipPop()
 	play(ASSETS.Snap, 1.8, 0.3)

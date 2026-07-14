@@ -20,6 +20,7 @@ local Remotes = require(ReplicatedStorage.Remotes)
 local DataService = require(script.Parent.DataService)
 local IncomeService = require(script.Parent.IncomeService)
 local PlayerStats = require(script.Parent.PlayerStats)
+local Rewards = require(script.Parent.Rewards)
 
 local OFFLINE = GameConfig.Offline
 local DAILY = GameConfig.Daily
@@ -42,9 +43,9 @@ local function grantOfflineIncome(player: Player, data)
 	if earned <= 0 then
 		return
 	end
-	DataService.grantCoins(player, earned)
+	DataService.grantSilver(player, earned)
 	Remotes.WelcomeBack:FireClient(player, {
-		Coins = earned,
+		Silver = earned,
 		AwaySeconds = seconds,
 	})
 end
@@ -66,21 +67,13 @@ local function grantDailyReward(player: Player, data)
 	local day = ((data.DailyStreak - 1) % #DAILY.Rewards) + 1
 	local reward = DAILY.Rewards[day]
 
-	if reward.Type == "Coins" then
-		DataService.grantCoins(player, reward.Amount)
-	elseif reward.Type == "LuckBoost" then
-		data.LuckEndsAt = os.time() + GameConfig.LuckBoost.DurationSeconds
+	-- Patch 5: all reward types flow through the shared Rewards module
+	if reward.Type == "Silver" then
+		DataService.grantSilver(player, reward.Amount)
+	elseif reward.Type == "Potion" then
+		Rewards.grant(player, { Potion = reward.Key })
 	elseif reward.Type == "Egg" then
-		-- Room in the satchel? Otherwise a coin consolation, never a lost reward
-		if #data.EggInventory < PlayerStats.getEggCapacity(player) then
-			table.insert(data.EggInventory, reward.EggType)
-			Remotes.EggInventoryUpdate:FireClient(player, {
-				Inventory = data.EggInventory,
-				Capacity = PlayerStats.getEggCapacity(player),
-			})
-		else
-			DataService.grantCoins(player, 500)
-		end
+		Rewards.grant(player, { Egg = reward.EggType })
 	end
 
 	Remotes.DailyReward:FireClient(player, {

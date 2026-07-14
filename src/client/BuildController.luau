@@ -362,13 +362,20 @@ local function refreshPalette()
 		end
 		order += 1
 		local biome = def.Biome and GameConfig.BiomeByName[def.Biome]
+		-- PATCH 5: trader-exclusive decor shows locked until bought with gold
+		local locked = def.Exclusive and not (sanctuary and sanctuary.Unlocked and sanctuary.Unlocked[def.Key])
 		local itemButton = makeButton(paletteGrid, {
 			Size = UDim2.new(0, 108, 0, 52),
-			BackgroundColor3 = Color3.fromRGB(55, 62, 75),
-			Text = (biome and biome.Emoji .. " " or "") .. def.Title,
+			BackgroundColor3 = locked and Color3.fromRGB(45, 48, 58) or Color3.fromRGB(55, 62, 75),
+			Text = locked and ("🔒 " .. def.Title) or ((biome and biome.Emoji .. " " or "") .. def.Title),
+			TextColor3 = locked and Color3.fromRGB(140, 146, 158) or Color3.new(1, 1, 1),
 			LayoutOrder = order,
 		})
 		itemButton.Activated:Connect(function()
+			if locked then
+				Sounds.errorBuzz()
+				return
+			end
 			clearSelection()
 			startGhost(def.Key, 0, nil)
 		end)

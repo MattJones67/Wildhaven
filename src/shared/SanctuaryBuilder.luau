@@ -208,6 +208,53 @@ builders.SignProp = function(m)
 	makePart(m, { Size = Vector3.new(0.4, 2.6, 0.4), Color = DARK_WOOD, Material = Enum.Material.Wood, CFrame = CFrame.new(0, 1.3, 0) })
 	makePart(m, { Size = Vector3.new(2.6, 1.2, 0.3), Color = WOOD, Material = Enum.Material.Wood, CFrame = CFrame.new(0, 2.4, 0), CanCollide = false })
 end
+-- PATCH 5: trader-exclusive decor (unlocked with gold from Barnaby)
+builders.GoldenStatue = function(m)
+	-- Stone plinth + a gleaming golden stag silhouette
+	makePart(m, { Size = Vector3.new(3, 1, 3), Color = Color3.fromRGB(180, 175, 165), Material = Enum.Material.Slate, CFrame = CFrame.new(0, 0.5, 0) })
+	local gold = Color3.fromRGB(255, 205, 80)
+	local body = makeBall(m, Vector3.new(1.4, 1.2, 2), gold, CFrame.new(0, 2, 0), Enum.Material.Metal)
+	body.Reflectance = 0.35
+	local head = makeBall(m, Vector3.new(0.9, 0.85, 0.9), gold, CFrame.new(0, 3, -0.7), Enum.Material.Metal)
+	head.Reflectance = 0.35
+	for _, side in { -1, 1 } do
+		local antler = makePart(m, {
+			Size = Vector3.new(1.2, 0.14, 0.14),
+			Color = gold,
+			Material = Enum.Material.Metal,
+			Reflectance = 0.35,
+			CanCollide = false,
+			CFrame = CFrame.new(side * 0.3, 3.7, -0.6) * CFrame.Angles(0, 0, math.rad(90 - side * 25)),
+		})
+		antler.Shape = Enum.PartType.Cylinder
+	end
+	local light = Instance.new("PointLight")
+	light.Color = gold
+	light.Brightness = 0.8
+	light.Range = 10
+	light.Parent = body
+end
+builders.StarLantern = function(m)
+	makePart(m, { Size = Vector3.new(0.35, 4.2, 0.35), Color = DARK_WOOD, Material = Enum.Material.Wood, CFrame = CFrame.new(0, 2.1, 0) })
+	-- A slowly-glowing star of two crossed neon slabs
+	local starColor = Color3.fromRGB(170, 200, 255)
+	for _, angle in { 0, 45, 90, 135 } do
+		local ray = makePart(m, {
+			Size = Vector3.new(1.6, 0.35, 0.35),
+			Color = starColor,
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			CFrame = CFrame.new(0, 4.6, 0) * CFrame.Angles(0, 0, math.rad(angle)),
+		})
+		ray.CanQuery = false
+	end
+	local light = Instance.new("PointLight")
+	light.Color = starColor
+	light.Brightness = 1.4
+	light.Range = 16
+	light.Parent = m:FindFirstChildWhichIsA("BasePart")
+end
+
 builders.Arch = function(m)
 	for _, dx in { -2.4, 2.4 } do
 		makePart(m, { Size = Vector3.new(0.8, 5, 0.8), Color = WOOD, Material = Enum.Material.Wood, CFrame = CFrame.new(dx, 2.5, 0) })

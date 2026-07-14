@@ -52,7 +52,8 @@ local function onRebirth(player: Player)
 
 	-- THE TRADE
 	data.Rebirths += 1
-	data.Coins = GameConfig.Economy.StartingCoins
+	data.Silver = GameConfig.Economy.StartingSilver
+	-- (GOLD deliberately survives rebirth — it's premium, not progression)
 	for _, upgrade in GameConfig.BaseUpgrades do
 		data.Upgrades[upgrade.Key] = 1 -- everything back to level 1
 	end

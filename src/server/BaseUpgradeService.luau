@@ -189,13 +189,20 @@ local function onBuyUpgrade(player: Player, key: any)
 		return { Success = false, Error = "Already maxed!" }
 	end
 
-	-- SECURITY CHECK 3: server-side affordability
+	-- SECURITY CHECK 3: server-side affordability — patch 5 currency split:
+	-- FUNCTIONAL upgrades cost SILVER (the grind), AESTHETIC cost GOLD (the flex)
 	local cost = upgrade.Prices[nextLevel]
-	if data.Coins < cost then
-		return { Success = false, Error = "Not enough coins!" }
+	if upgrade.Kind == "Aesthetic" then
+		if data.Gold < cost then
+			return { Success = false, Error = "Not enough gold! (Codes, quests & lucky blocks)" }
+		end
+		data.Gold -= cost
+	else
+		if data.Silver < cost then
+			return { Success = false, Error = "Not enough silver!" }
+		end
+		data.Silver -= cost
 	end
-
-	data.Coins -= cost
 	data.Upgrades[key] = nextLevel
 
 	-- Apply visible/functional side effects immediately
@@ -214,7 +221,7 @@ local function onBuyUpgrade(player: Player, key: any)
 
 	GoalService.bump(player, "UpgradesBought")
 	BaseUpgradeService.pushUpgrades(player)
-	return { Success = true, Coins = math.floor(data.Coins) }
+	return { Success = true, Silver = math.floor(data.Silver), Gold = data.Gold }
 end
 
 -- ------------------------------------------------------------

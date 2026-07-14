@@ -13,17 +13,39 @@ local GameConfig = {}
 -- ============================================================
 -- ECONOMY
 -- ============================================================
+-- PATCH 5: TWO CURRENCIES.
+-- SILVER = the everyday grind currency: earned from pets, spent on
+--          functional upgrades and shop potions. (Old "coins" migrate here.)
+-- GOLD   = rare & premium: earned ONLY from codes, quests (small amounts),
+--          and Lucky Blocks. Spent on class re-rolls, base cosmetics, and
+--          the Wandering Trader.
+-- TODO(monetisation): buying Gold with Robux plugs into DataService.grantGold
+-- via a MarketplaceService ProcessReceipt in a future patch. NOT now.
 GameConfig.Economy = {
-	StartingCoins = 50, -- coins a brand-new player begins with
-	-- World eggs are FREE to collect; coins now fund base upgrades.
+	StartingSilver = 50, -- silver a brand-new player begins with
+	StartingGold = 0, -- gold is earned, never given
 }
 
-GameConfig.LuckBoost = {
-	Cost = 100, -- coins to buy one Luck Boost
-	Multiplier = 2, -- effective luck while the boost is active (1 = normal)
-	DurationSeconds = 120, -- how long the boost lasts
-	-- Luck improves: rarer pets from egg pools, mutation odds, AND size odds.
+-- ============================================================
+-- POTIONS (patch 5 — replaces the old x2 Luck Boost button).
+-- Consumables that grant TIMED buffs. Kind = which stat they buff:
+--   Luck  -> multiplies effective luck (rare/mutation/size odds)
+--   Hatch -> multiplies hatch TIME (0.75 = 25% faster)
+-- SilverCost = shop price (nil = not sold in the shop; trader/blocks only).
+-- Stacking rule: ONE active buff per Kind — activating a second of the
+-- same kind while one runs is rejected (simple and readable).
+-- ============================================================
+GameConfig.Potions = {
+	{ Key = "MinorLuck", Title = "Minor Luck Potion", Emoji = "🍀", Kind = "Luck", Mult = 1.5, DurationSeconds = 240, SilverCost = 400, Color = Color3.fromRGB(110, 220, 120) },
+	{ Key = "MajorLuck", Title = "Major Luck Potion", Emoji = "🍀", Kind = "Luck", Mult = 2.25, DurationSeconds = 360, SilverCost = nil, Color = Color3.fromRGB(60, 255, 140) },
+	{ Key = "MinorHatch", Title = "Minor Hatch Potion", Emoji = "⚡", Kind = "Hatch", Mult = 0.75, DurationSeconds = 240, SilverCost = 400, Color = Color3.fromRGB(255, 200, 90) },
+	{ Key = "MajorHatch", Title = "Major Hatch Potion", Emoji = "⚡", Kind = "Hatch", Mult = 0.5, DurationSeconds = 360, SilverCost = nil, Color = Color3.fromRGB(255, 160, 60) },
 }
+
+GameConfig.PotionByKey = {}
+for _, potion in GameConfig.Potions do
+	GameConfig.PotionByKey[potion.Key] = potion
+end
 
 GameConfig.Income = {
 	TickSeconds = 1, -- how often the server pays out passive income
@@ -380,13 +402,15 @@ GameConfig.BaseUpgrades = {
 		Values = { 4, 6, 8, 12 }, -- pets placeable into sanctuary habitats
 		Prices = { 0, 2000, 15000, 80000 },
 	},
+	-- PATCH 5: Aesthetic (Kind = "Aesthetic") upgrades now cost GOLD —
+	-- cosmetics are the flex economy; functional upgrades stay Silver.
 	{
 		Key = "BaseTier",
 		Title = "Home",
 		Kind = "Aesthetic",
 		Describe = "%s",
 		Values = { "Starter Cabin", "Cozy Cabin", "Grand Treehouse Annex" },
-		Prices = { 0, 1500, 20000 },
+		Prices = { 0, 12, 35 }, -- GOLD
 	},
 	{
 		Key = "Lanterns",
@@ -394,7 +418,7 @@ GameConfig.BaseUpgrades = {
 		Kind = "Aesthetic",
 		Describe = "Glowing lanterns at your base",
 		Values = { false, true }, -- simple owned/not-owned unlock
-		Prices = { 0, 300 },
+		Prices = { 0, 3 }, -- GOLD
 	},
 	{
 		Key = "Banner",
@@ -402,7 +426,7 @@ GameConfig.BaseUpgrades = {
 		Kind = "Aesthetic",
 		Describe = "A proud banner on your cabin",
 		Values = { false, true },
-		Prices = { 0, 750 },
+		Prices = { 0, 5 }, -- GOLD
 	},
 	{
 		Key = "FancyFirepit",
@@ -410,7 +434,7 @@ GameConfig.BaseUpgrades = {
 		Kind = "Aesthetic",
 		Describe = "A cozy firepit by your door",
 		Values = { false, true },
-		Prices = { 0, 2000 },
+		Prices = { 0, 8 }, -- GOLD
 	},
 }
 
@@ -481,12 +505,12 @@ GameConfig.Daily = {
 	CooldownSeconds = 24 * 3600, -- one claim per 24h (server-timestamped)
 	GraceSeconds = 48 * 3600, -- come back within 48h or the streak resets
 	Rewards = {
-		{ Type = "Coins", Amount = 100, Label = "100 🪙" },
-		{ Type = "Coins", Amount = 250, Label = "250 🪙" },
-		{ Type = "LuckBoost", Label = "Free 🍀 Luck Boost" },
-		{ Type = "Coins", Amount = 750, Label = "750 🪙" },
+		{ Type = "Silver", Amount = 100, Label = "100 🪙" },
+		{ Type = "Silver", Amount = 250, Label = "250 🪙" },
+		{ Type = "Potion", Key = "MinorLuck", Label = "🍀 Minor Luck Potion" },
+		{ Type = "Silver", Amount = 750, Label = "750 🪙" },
 		{ Type = "Egg", EggType = "Mossy Egg", Label = "A Mossy Egg 🥚" },
-		{ Type = "Coins", Amount = 2000, Label = "2,000 🪙" },
+		{ Type = "Silver", Amount = 2000, Label = "2,000 🪙" },
 		{ Type = "Egg", EggType = "Ancient Egg", Label = "An Ancient Egg 🥚✨" },
 	},
 }
@@ -699,6 +723,10 @@ GameConfig.SanctuaryObjects = {
 	{ Key = "LanternProp", Title = "Lantern", Category = "Decor" },
 	{ Key = "SignProp", Title = "Sign", Category = "Decor" },
 	{ Key = "Arch", Title = "Arch", Category = "Decor" },
+	-- PATCH 5: trader-exclusive decor — must be UNLOCKED (bought with gold
+	-- from the Wandering Trader) before it appears placeable.
+	{ Key = "GoldenStatue", Title = "Golden Stag Statue", Category = "Decor", Exclusive = true },
+	{ Key = "StarLantern", Title = "Star Lantern", Category = "Decor", Exclusive = true },
 }
 
 GameConfig.SanctuaryObjectByKey = {}
@@ -724,7 +752,7 @@ GameConfig.Classes = {
 		{ Name = "Angel", Weight = 1, Tier = "Chase", Color = Color3.fromRGB(255, 250, 200), Perks = { Luck = 1.25, HatchSpeed = 0.85 }, Blurb = "+25% luck, 15% faster hatches ✨" },
 		{ Name = "Demon", Weight = 1, Tier = "Chase", Color = Color3.fromRGB(255, 90, 90), Perks = { Income = 1.25, MutationChance = 1.1 }, Blurb = "+25% income, +10% mutation odds 🔥" },
 	},
-	RerollCost = 750, -- coins for an extra roll beyond the free daily one
+	RerollCostGold = 8, -- GOLD for an extra roll beyond the free daily (patch 5)
 	FreeRollCooldownSeconds = 24 * 3600,
 }
 
@@ -738,45 +766,46 @@ end
 -- repeatable DAILY per biome. Types:
 --   CollectEgg  — pick up Count eggs of type Param (progress counted live)
 --   HatchPet    — hatch Count pets from biome Param at rarity >= MinRarity
--- Rewards: Coins / LuckBoost / ClassToken (a free class roll) / Pet (name).
+-- Rewards can COMBINE fields (patch 5): Silver / Gold (small amounts — a
+-- primary premium source!) / Potion (key) / ClassToken / Pet (name).
 -- TODO(later patch): "Discover the hidden ruins" secret-area quests hook
 -- in here as a third type once secret areas exist.
 -- ============================================================
 GameConfig.Quests = {
 	Chains = {
 		Forest = {
-			{ Id = "forest1", Text = "Collect 3 Forest Eggs", Type = "CollectEgg", Param = "Forest Egg", Count = 3, Reward = { Coins = 200 } },
-			{ Id = "forest2", Text = "Hatch an Uncommon or better", Type = "HatchPet", Param = "Any", MinRarity = 2, Count = 1, Reward = { LuckBoost = true } },
-			{ Id = "forest3", Text = "Collect 2 Mossy Eggs", Type = "CollectEgg", Param = "Mossy Egg", Count = 2, Reward = { Coins = 500 } },
+			{ Id = "forest1", Text = "Collect 3 Forest Eggs", Type = "CollectEgg", Param = "Forest Egg", Count = 3, Reward = { Silver = 200 } },
+			{ Id = "forest2", Text = "Hatch an Uncommon or better", Type = "HatchPet", Param = "Any", MinRarity = 2, Count = 1, Reward = { Potion = "MinorLuck" } },
+			{ Id = "forest3", Text = "Collect 2 Mossy Eggs", Type = "CollectEgg", Param = "Mossy Egg", Count = 2, Reward = { Silver = 500, Gold = 1 } },
 		},
 		Desert = {
-			{ Id = "desert1", Text = "Collect 3 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 3, Reward = { Coins = 400 } },
+			{ Id = "desert1", Text = "Collect 3 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 3, Reward = { Silver = 400 } },
 			{ Id = "desert2", Text = "Hatch a Desert Rare or better", Type = "HatchPet", Param = "Desert", MinRarity = 3, Count = 1, Reward = { ClassToken = 1 } },
-			{ Id = "desert3", Text = "Collect 5 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 5, Reward = { Pet = "Fennec Fox" } },
+			{ Id = "desert3", Text = "Collect 5 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 5, Reward = { Pet = "Fennec Fox", Gold = 2 } },
 		},
 		Tundra = {
-			{ Id = "tundra1", Text = "Collect 3 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 3, Reward = { Coins = 800 } },
-			{ Id = "tundra2", Text = "Hatch a Tundra Rare or better", Type = "HatchPet", Param = "Tundra", MinRarity = 3, Count = 1, Reward = { LuckBoost = true } },
-			{ Id = "tundra3", Text = "Collect 5 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 5, Reward = { Coins = 2000 } },
+			{ Id = "tundra1", Text = "Collect 3 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 3, Reward = { Silver = 800 } },
+			{ Id = "tundra2", Text = "Hatch a Tundra Rare or better", Type = "HatchPet", Param = "Tundra", MinRarity = 3, Count = 1, Reward = { Potion = "MinorLuck" } },
+			{ Id = "tundra3", Text = "Collect 5 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 5, Reward = { Silver = 2000, Gold = 2 } },
 		},
 		Volcanic = {
-			{ Id = "volcanic1", Text = "Collect 3 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 3, Reward = { Coins = 1500 } },
+			{ Id = "volcanic1", Text = "Collect 3 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 3, Reward = { Silver = 1500 } },
 			{ Id = "volcanic2", Text = "Hatch a Volcanic Epic or better", Type = "HatchPet", Param = "Volcanic", MinRarity = 4, Count = 1, Reward = { ClassToken = 1 } },
-			{ Id = "volcanic3", Text = "Collect 5 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 5, Reward = { Coins = 5000 } },
+			{ Id = "volcanic3", Text = "Collect 5 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 5, Reward = { Silver = 5000, Gold = 3 } },
 		},
 		Sky = {
-			{ Id = "sky1", Text = "Collect 3 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 3, Reward = { Coins = 3000 } },
-			{ Id = "sky2", Text = "Hatch a Sky Epic or better", Type = "HatchPet", Param = "Sky", MinRarity = 4, Count = 1, Reward = { LuckBoost = true } },
-			{ Id = "sky3", Text = "Collect 5 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 5, Reward = { Pet = "Griffin Cub" } },
+			{ Id = "sky1", Text = "Collect 3 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 3, Reward = { Silver = 3000 } },
+			{ Id = "sky2", Text = "Hatch a Sky Epic or better", Type = "HatchPet", Param = "Sky", MinRarity = 4, Count = 1, Reward = { Potion = "MinorLuck" } },
+			{ Id = "sky3", Text = "Collect 5 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 5, Reward = { Pet = "Griffin Cub", Gold = 3 } },
 		},
 	},
 	-- Repeatable dailies (per biome, 24h cooldown after turn-in)
 	Dailies = {
-		Forest = { Id = "dailyForest", Text = "Daily: Collect 2 Forest Eggs", Type = "CollectEgg", Param = "Forest Egg", Count = 2, Reward = { Coins = 300 } },
-		Desert = { Id = "dailyDesert", Text = "Daily: Collect 2 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 2, Reward = { Coins = 600 } },
-		Tundra = { Id = "dailyTundra", Text = "Daily: Collect 2 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 2, Reward = { Coins = 1200 } },
-		Volcanic = { Id = "dailyVolcanic", Text = "Daily: Collect 2 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 2, Reward = { Coins = 2400 } },
-		Sky = { Id = "dailySky", Text = "Daily: Collect 2 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 2, Reward = { Coins = 4000 } },
+		Forest = { Id = "dailyForest", Text = "Daily: Collect 2 Forest Eggs", Type = "CollectEgg", Param = "Forest Egg", Count = 2, Reward = { Silver = 300 } },
+		Desert = { Id = "dailyDesert", Text = "Daily: Collect 2 Sand Eggs", Type = "CollectEgg", Param = "Sand Egg", Count = 2, Reward = { Silver =600 } },
+		Tundra = { Id = "dailyTundra", Text = "Daily: Collect 2 Frost Eggs", Type = "CollectEgg", Param = "Frost Egg", Count = 2, Reward = { Silver = 1200 } },
+		Volcanic = { Id = "dailyVolcanic", Text = "Daily: Collect 2 Ember Eggs", Type = "CollectEgg", Param = "Ember Egg", Count = 2, Reward = { Silver = 2400 } },
+		Sky = { Id = "dailySky", Text = "Daily: Collect 2 Sky Eggs", Type = "CollectEgg", Param = "Sky Egg", Count = 2, Reward = { Silver = 4000 } },
 	},
 	DailyCooldownSeconds = 24 * 3600,
 }
@@ -790,7 +819,78 @@ GameConfig.Guides = {
 	Sky = { Name = "Zephyr", Greeting = "You made it up here! The clouds are full of wonders." },
 }
 
+-- ============================================================
+-- CODES (patch 5) — one-time-per-player redemptions; a primary GOLD
+-- source and a marketing lever (drop new codes with updates/socials).
+-- Rewards use the same multi-field shape as quests.
+-- Remove a code from this table to expire it everywhere at once.
+-- ============================================================
+GameConfig.Codes = {
+	WILDHAVEN = { Gold = 5 },
+	LAUNCHDAY = { Silver = 2500 },
+	LUCKYME = { Potion = "MinorLuck", Count = 2 },
+	GOLDRUSH = { Gold = 3, Silver = 500 },
+}
+
+-- ============================================================
+-- LUCKY BLOCKS (patch 5) — random world drops everyone can race to.
+-- ============================================================
+GameConfig.LuckyBlocks = {
+	SpawnIntervalSeconds = 180, -- how often the server ROLLS for a spawn
+	SpawnChance = 0.55, -- chance each roll actually drops a block
+	DespawnSeconds = 120, -- unopened blocks vanish after this
+	GoldenChance = 0.12, -- chance a drop is the GOLDEN variant
+	FallHeight = 90, -- how high above the ground the block appears
+	FallSeconds = 2.2, -- the suspenseful descent
+	OpenMaxDistance = 12, -- SECURITY: server-checked claim distance
+	-- Weighted reward tables (same multi-field rewards as quests)
+	Rewards = {
+		{ Weight = 30, Reward = { Silver = 1500 }, Label = "1,500 🪙" },
+		{ Weight = 25, Reward = { Potion = "MinorLuck" }, Label = "🍀 Minor Luck Potion" },
+		{ Weight = 20, Reward = { Potion = "MinorHatch" }, Label = "⚡ Minor Hatch Potion" },
+		{ Weight = 15, Reward = { Gold = 2 }, Label = "2 🌕 Gold!" },
+		{ Weight = 10, Reward = { Egg = "Ancient Egg" }, Label = "An Ancient Egg! 🥚✨" },
+	},
+	GoldenRewards = {
+		{ Weight = 30, Reward = { Gold = 5 }, Label = "5 🌕 Gold!" },
+		{ Weight = 25, Reward = { Potion = "MajorLuck" }, Label = "🍀 MAJOR Luck Potion!" },
+		{ Weight = 20, Reward = { Potion = "MajorHatch" }, Label = "⚡ MAJOR Hatch Potion!" },
+		{ Weight = 15, Reward = { Egg = "Mythic Egg" }, Label = "A MYTHIC EGG?! 🥚🌈" },
+		{ Weight = 10, Reward = { Gold = 10, Silver = 2500 }, Label = "The jackpot! 10 🌕 + 2,500 🪙" },
+	},
+}
+
+-- ============================================================
+-- WANDERING TRADER (patch 5) — a roaming GOLD vendor with limited,
+-- rotating stock and a departure timer for urgency.
+-- ============================================================
+GameConfig.Trader = {
+	SpawnIntervalSeconds = 420, -- how often he TRIES to appear somewhere
+	SpawnChance = 0.65,
+	DwellSeconds = 180, -- how long he stays per visit
+	StockPerVisit = 3, -- how many different items he carries each visit
+	BuyMaxDistance = 14, -- SECURITY: must actually be at his stall
+	Name = "Barnaby",
+	Lines = {
+		"Psst — rare goods, fair prices. Well... prices.",
+		"Everything here fell off the back of a sky-wagon. Probably.",
+		"Gold only, friend. Silver jingles too loud on the road.",
+		"Buy quick! The road calls and she is IMPATIENT.",
+	},
+	-- The stock pool; each visit draws StockPerVisit of these at random.
+	-- Qty = how many can be sold PER VISIT (first come first served).
+	Stock = {
+		{ Key = "MajorLuckPotion", Title = "Major Luck Potion", Gold = 5, Qty = 2, Reward = { Potion = "MajorLuck" } },
+		{ Key = "MajorHatchPotion", Title = "Major Hatch Potion", Gold = 5, Qty = 2, Reward = { Potion = "MajorHatch" } },
+		{ Key = "AncientEgg", Title = "Ancient Egg", Gold = 8, Qty = 2, Reward = { Egg = "Ancient Egg" } },
+		{ Key = "MythicEgg", Title = "Mythic Egg", Gold = 22, Qty = 1, Reward = { Egg = "Mythic Egg" } },
+		{ Key = "GoldenStatue", Title = "Golden Stag Statue (decor)", Gold = 15, Qty = 1, Reward = { Decor = "GoldenStatue" } },
+		{ Key = "StarLantern", Title = "Star Lantern (decor)", Gold = 10, Qty = 1, Reward = { Decor = "StarLantern" } },
+	},
+}
+
 -- TODO (future patch): visiting other players' sanctuaries (social hooks).
+-- TODO (patch 6): trade tokens + the trading system.
 
 -- ============================================================
 -- FOREST GENERATION

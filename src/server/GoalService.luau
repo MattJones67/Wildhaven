@@ -8,7 +8,7 @@
 	  * live values computed on demand (IncomePerSec, EquippedCount,
 	    DiscoveredCount, Rebirths)
 
-	Completing a goal grants coins (through DataService.grantCoins so it
+	Completing a goal grants silver (through DataService.grantSilver so it
 	counts toward rebirth), toasts the player, and advances the ladder.
 	A slow loop re-checks live stats so "reach 500/s" completes on its own.
 ]]
@@ -76,7 +76,7 @@ function GoalService.check(player: Player)
 		if not goal or statValue(player, data, goal.Stat) < goal.Target then
 			break
 		end
-		DataService.grantCoins(player, goal.Reward)
+		DataService.grantSilver(player, goal.Reward)
 		data.GoalIndex += 1
 		advanced = true
 		Remotes.Notify:FireClient(player, {

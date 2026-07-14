@@ -78,13 +78,14 @@ local function onRollClass(player: Player)
 	elseif os.time() - (data.LastClassRollAt or 0) >= CLASSES.FreeRollCooldownSeconds then
 		data.LastClassRollAt = os.time()
 		paidWith = "daily"
-	elseif data.Coins >= CLASSES.RerollCost then
-		data.Coins -= CLASSES.RerollCost
-		paidWith = "coins"
+	elseif data.Gold >= CLASSES.RerollCostGold then
+		-- PATCH 5: re-rolls are a GOLD sink now (premium identity chasing)
+		data.Gold -= CLASSES.RerollCostGold
+		paidWith = "gold"
 	else
 		local waitSeconds = (data.LastClassRollAt or 0) + CLASSES.FreeRollCooldownSeconds - os.time()
 		local hours = math.max(1, math.ceil(waitSeconds / 3600))
-		return { Success = false, Error = ("Free roll in ~%dh (or %d 🪙)"):format(hours, CLASSES.RerollCost) }
+		return { Success = false, Error = ("Free roll in ~%dh (or %d 🌕 gold)"):format(hours, CLASSES.RerollCostGold) }
 	end
 
 	local class = rollWeighted(rng)
@@ -98,7 +99,8 @@ local function onRollClass(player: Player)
 		Tier = class.Tier,
 		Blurb = class.Blurb,
 		PaidWith = paidWith,
-		Coins = math.floor(data.Coins),
+		Silver = math.floor(data.Silver),
+		Gold = data.Gold,
 	}
 end
 

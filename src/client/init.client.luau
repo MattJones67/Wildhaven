@@ -26,6 +26,7 @@ local PetFollowController = require(script.PetFollowController)
 local ProgressUI = require(script.ProgressUI)
 local QuestUI = require(script.QuestUI)
 local Sounds = require(script.Sounds)
+local TraderUI = require(script.TraderUI)
 local UIController = require(script.UIController)
 
 -- One loop cycles the hue of every Rainbow-mutated part (reveals + cards)
@@ -65,17 +66,31 @@ end, function()
 	UIController.showToast("Egg is hatching!")
 end)
 
-local requestLuckBoost = makeAction(function()
-	return Remotes.BuyLuckBoost:InvokeServer()
+-- PATCH 5: the x2 Luck button is gone — potions, codes & the trader instead
+local requestBuyPotion = makeAction(function(key)
+	return Remotes.BuyPotion:InvokeServer(key)
 end, function(result)
-	UIController.setState({ Coins = result.Coins, LuckSecondsLeft = result.SecondsLeft })
-	Sounds.raritySting(3)
+	UIController.setState({ Silver = result.Silver })
+	Sounds.raritySting(2)
+	UIController.showToast("Potion added to your bag!")
+end)
+
+local requestUsePotion = makeAction(function(key)
+	return Remotes.UsePotion:InvokeServer(key)
+end, function()
+	Sounds.potionDrink()
+end)
+
+local requestRedeemCode = makeAction(function(text)
+	return Remotes.RedeemCode:InvokeServer(text)
+end, function(result)
+	UIController.setCodeResult("✅ " .. result.Text, true)
 end)
 
 local requestUpgrade = makeAction(function(key)
 	return Remotes.BuyUpgrade:InvokeServer(key)
 end, function(result)
-	UIController.setState({ Coins = result.Coins })
+	UIController.setState({ Silver = result.Silver, Gold = result.Gold })
 	Sounds.raritySting(3)
 	UIController.showToast("Upgrade purchased!")
 end)
@@ -103,7 +118,7 @@ end)
 local requestRollClass = makeAction(function()
 	return Remotes.RollClass:InvokeServer()
 end, function(result)
-	UIController.setState({ Coins = result.Coins })
+	UIController.setState({ Silver = result.Silver, Gold = result.Gold })
 	ProgressUI.playClassRoll(result) -- the suspense spin + reveal
 end)
 
@@ -113,7 +128,9 @@ end)
 
 UIController.init({
 	onStartHatch = requestStartHatch,
-	onBuyLuck = requestLuckBoost,
+	onBuyPotion = requestBuyPotion,
+	onUsePotion = requestUsePotion,
+	onRedeemCode = requestRedeemCode,
 	onBuyUpgrade = requestUpgrade,
 	onToggleEquip = requestToggleEquip,
 	onToggleAutoHatch = requestToggleAutoHatch,
@@ -128,6 +145,7 @@ PetFollowController.init()
 BiomeWallController.init()
 BuildController.init()
 QuestUI.init()
+TraderUI.init()
 
 -- Live updates pushed by the server
 Remotes.StateUpdate.OnClientEvent:Connect(function(state)
@@ -147,6 +165,12 @@ Remotes.QuestDialog.OnClientEvent:Connect(function(payload)
 end)
 Remotes.QuestUpdate.OnClientEvent:Connect(function(payload)
 	QuestUI.setTracker(payload)
+end)
+Remotes.PotionsUpdate.OnClientEvent:Connect(function(payload)
+	UIController.setPotions(payload.Potions)
+end)
+Remotes.TraderDialog.OnClientEvent:Connect(function(payload)
+	TraderUI.open(payload)
 end)
 Remotes.EggInventoryUpdate.OnClientEvent:Connect(function(payload)
 	UIController.setEggInventory(payload.Inventory, payload.Capacity)
@@ -176,6 +200,13 @@ Remotes.Notify.OnClientEvent:Connect(function(payload)
 		Sounds.hatchReady()
 	elseif payload.Kind == "Quest" then
 		Sounds.coinBlip() -- the soft objective-tick pop
+	elseif payload.Kind == "Gold" then
+		Sounds.goldGain() -- gold is rare; it shimmers
+	elseif payload.Kind == "Event" then
+		-- Shared world moments (Lucky Block drops, the Trader arriving):
+		-- big center-screen announcement so people actually RUN
+		UIController.announce(payload.Text, Color3.fromRGB(255, 205, 80))
+		Sounds.mythicAnnounce()
 	end
 end)
 Remotes.HatchComplete.OnClientEvent:Connect(function(result)
@@ -192,7 +223,7 @@ end)
 Remotes.WelcomeBack.OnClientEvent:Connect(function(payload)
 	local minutes = math.floor(payload.AwaySeconds / 60)
 	local timeText = minutes >= 120 and (math.floor(minutes / 60) .. " hours") or (minutes .. " minutes")
-	ProgressUI.popup("💤 Welcome back!", ("Your pets earned %s 🪙 while you were away (%s)!"):format(tostring(payload.Coins), timeText))
+	ProgressUI.popup("💤 Welcome back!", ("Your pets earned %s 🪙 while you were away (%s)!"):format(tostring(payload.Silver), timeText))
 end)
 Remotes.DailyReward.OnClientEvent:Connect(function(payload)
 	ProgressUI.popup("🎁 Daily Reward — Day " .. payload.Day, "You got: " .. payload.Label)
@@ -210,6 +241,7 @@ if initialState then
 	UIController.setUpgrades({ Upgrades = initialState.Upgrades, EggCapacity = initialState.EggCapacity, EquipSlots = initialState.EquipSlots })
 	UIController.setEquipped({ Equipped = initialState.Equipped, Slots = initialState.EquipSlots })
 	UIController.setAutoHatch(initialState.AutoHatchUnlocked, initialState.AutoHatchEnabled)
+	UIController.setPotions(initialState.Potions)
 	ProgressUI.setState(initialState)
 	ProgressUI.setDiscovered(initialState.Discovered)
 	ProgressUI.setGoal(initialState.Goal)

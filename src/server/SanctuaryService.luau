@@ -269,6 +269,7 @@ function SanctuaryService.payload(player: Player)
 	if not plot or not sanct then
 		return nil
 	end
+	local data = DataService.get(player)
 	return {
 		Biome = plot.Biome,
 		Origin = plot.Origin,
@@ -278,6 +279,7 @@ function SanctuaryService.payload(player: Player)
 		ObjectCap = PlayerStats.getSanctuaryObjectCap(player),
 		PetCap = PlayerStats.getSanctuaryPetCap(player),
 		PerkText = GameConfig.BiomeByName[plot.Biome].PerkText,
+		Unlocked = data and data.UnlockedDecor or {}, -- trader-exclusive decor owned
 	}
 end
 
@@ -316,6 +318,14 @@ local function onPlaceObject(player: Player, key: any, x: any, z: any, r: any)
 	-- SECURITY: catalog key + sane, in-bounds coordinates
 	if typeof(key) ~= "string" or not GameConfig.SanctuaryObjectByKey[key] then
 		return { Success = false, Error = "Unknown object" }
+	end
+	-- SECURITY (patch 5): trader-exclusive decor must be unlocked first
+	local objectDef = GameConfig.SanctuaryObjectByKey[key]
+	if objectDef.Exclusive then
+		local data = DataService.get(player)
+		if not data or not data.UnlockedDecor or not data.UnlockedDecor[key] then
+			return { Success = false, Error = "Buy that from the Wandering Trader first!" }
+		end
 	end
 	if not validPosition(x, z, r) then
 		return { Success = false, Error = "Out of bounds!" }

@@ -45,9 +45,13 @@ local LOAD_RETRIES = 3
 export type CollectionEntry = { Species: string, Mutation: string, Size: string?, Id: number? }
 export type Hatch = { Slot: number, EggType: string, EndsAt: number }
 export type PlayerData = {
-	Coins: number,
+	Silver: number, -- patch 5: the everyday currency (old "Coins" migrate here)
+	Gold: number, -- patch 5: rare premium currency (codes/quests/lucky blocks)
 	Collection: { CollectionEntry },
-	LuckEndsAt: number,
+	Potions: { [string]: number }, -- patch 5: potion key -> count owned
+	Buffs: { [string]: { Key: string, Mult: number, EndsAt: number } }, -- kind -> active buff
+	RedeemedCodes: { [string]: boolean }, -- patch 5: one-time code redemptions
+	UnlockedDecor: { [string]: boolean }, -- patch 5: trader-exclusive decor owned
 	EggInventory: { string },
 	Hatches: { Hatch },
 	Upgrades: { [string]: number },
@@ -85,9 +89,13 @@ end
 
 local function defaultData(): PlayerData
 	return {
-		Coins = GameConfig.Economy.StartingCoins,
+		Silver = GameConfig.Economy.StartingSilver,
+		Gold = GameConfig.Economy.StartingGold,
+		Potions = {},
+		Buffs = {},
+		RedeemedCodes = {},
+		UnlockedDecor = {},
 		Collection = {},
-		LuckEndsAt = 0,
 		EggInventory = {},
 		Hatches = {},
 		Upgrades = defaultUpgrades(),
@@ -114,6 +122,22 @@ end
 -- MIGRATION SAFETY: fill any missing field with its default so saves from
 -- older versions of the game load cleanly. Existing values pass through.
 local function reconcile(data: { [string]: any }): PlayerData
+	-- MIGRATION (patch 5): the single "Coins" balance becomes SILVER.
+	-- This runs BEFORE defaults, so a returning player's balance is never
+	-- overwritten by the new-player default.
+	if data.Coins ~= nil and data.Silver == nil then
+		data.Silver = data.Coins
+		data.Coins = nil
+	end
+	-- Old x2 Luck Boost timer becomes a Luck buff if it was still running
+	if data.LuckEndsAt ~= nil then
+		if os.time() < data.LuckEndsAt then
+			data.Buffs = data.Buffs or {}
+			data.Buffs.Luck = { Key = "MinorLuck", Mult = 2, EndsAt = data.LuckEndsAt }
+		end
+		data.LuckEndsAt = nil
+	end
+
 	local defaults = defaultData()
 	for key, value in defaults :: any do
 		if data[key] == nil then
@@ -210,30 +234,27 @@ function DataService.waitForData(player: Player, timeoutSeconds: number): Player
 	return nil
 end
 
--- Current effective luck for rolls: boosted while the timed boost is active.
-function DataService.getLuckMultiplier(player: Player): number
-	local data = DataService.get(player)
-	if data and os.time() < data.LuckEndsAt then
-		return GameConfig.LuckBoost.Multiplier
-	end
-	return 1
-end
+-- (Patch 5: the old getLuckMultiplier/getLuckSecondsLeft are gone —
+-- timed buffs live in data.Buffs and PlayerStats reads them directly.)
 
-function DataService.getLuckSecondsLeft(player: Player): number
-	local data = DataService.get(player)
-	if not data then
-		return 0
-	end
-	return math.max(0, data.LuckEndsAt - os.time())
-end
-
--- Grant coins the RIGHT way: every gain also counts toward TotalEarned,
--- which is what gates rebirth. (Spending goes through data.Coins directly.)
-function DataService.grantCoins(player: Player, amount: number)
+-- Grant SILVER the right way: every gain also counts toward TotalEarned,
+-- which is what gates rebirth. (Spending goes through data.Silver directly.)
+function DataService.grantSilver(player: Player, amount: number)
 	local data = DataService.get(player)
 	if data and amount > 0 then
-		data.Coins += amount
+		data.Silver += amount
 		data.TotalEarned += amount
+	end
+end
+
+-- Grant GOLD — rare and precious; does NOT feed TotalEarned (gold is not
+-- progression, it's premium spice).
+-- TODO(monetisation): a future Robux gold product calls this from its
+-- ProcessReceipt handler. Nothing else changes.
+function DataService.grantGold(player: Player, amount: number)
+	local data = DataService.get(player)
+	if data and amount > 0 then
+		data.Gold += amount
 	end
 end
 

@@ -79,13 +79,38 @@ local function classPerks(data): { Income: number?, Luck: number?, HatchSpeed: n
 	return class and class.Perks or {}
 end
 
+-- Patch 5: potion buffs. One active buff per Kind lives in data.Buffs;
+-- expiry is just a timestamp check, so nothing needs cleaning up.
+local function buffMult(data, kind: string): number
+	local buff = data.Buffs and data.Buffs[kind]
+	if buff and os.time() < buff.EndsAt then
+		return buff.Mult
+	end
+	return 1
+end
+
+-- HUD payload: every currently-active buff with its remaining time
+function PlayerStats.getBuffsPayload(player: Player): { { Kind: string, Key: string, Mult: number, SecondsLeft: number } }
+	local data = DataService.get(player)
+	local list = {}
+	if data and data.Buffs then
+		for kind, buff in data.Buffs do
+			local left = buff.EndsAt - os.time()
+			if left > 0 then
+				table.insert(list, { Kind = kind, Key = buff.Key, Mult = buff.Mult, SecondsLeft = left })
+			end
+		end
+	end
+	return list
+end
+
 -- Total effective luck for every roll (pets, mutations, sizes)
 function PlayerStats.getLuck(player: Player): number
 	local data = DataService.get(player)
 	if not data then
 		return 1
 	end
-	local boost = DataService.getLuckMultiplier(player) -- 1, or 2 while boosted
+	local boost = buffMult(data, "Luck") -- patch 5: potion buffs
 	local rebirthBonus = 1 + REBIRTH.LuckPerRebirth * (data.Rebirths or 0)
 	local indexBonus = 1 + IndexUtil.bonuses(data.Discovered or {}).Luck
 	local plot = plotPerk(data).Luck or 1
@@ -187,6 +212,7 @@ function PlayerStats.getHatchSpeedMultiplier(player: Player): number
 	local mult = upgradeValue(data, "HatchSpeed") * (1 - REBIRTH.HatchSpeedPerRebirth) ^ (data.Rebirths or 0)
 	mult *= plotPerk(data).HatchSpeed or 1
 	mult *= classPerks(data).HatchSpeed or 1
+	mult *= buffMult(data, "Hatch") -- patch 5: hatch potions
 	return math.max(mult, REBIRTH.HatchSpeedFloor)
 end
 

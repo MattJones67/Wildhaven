@@ -17,7 +17,10 @@ local DEFINITIONS = {
 	-- client -> server requests (server validates everything)
 	GetState = "RemoteFunction", -- full state snapshot once, on join
 	StartHatch = "RemoteFunction", -- "put one of my <egg type> into a hatch slot"
-	BuyLuckBoost = "RemoteFunction", -- "buy a luck boost"
+	BuyPotion = "RemoteFunction", -- patch 5: "buy potion <key> for silver"
+	UsePotion = "RemoteFunction", -- patch 5: "drink potion <key>" (timed buff)
+	RedeemCode = "RemoteFunction", -- patch 5: "redeem code <text>"
+	BuyTraderItem = "RemoteFunction", -- patch 5: "buy trader stock slot <index>"
 	BuyUpgrade = "RemoteFunction", -- "buy the next level of <upgrade key>"
 	ToggleEquip = "RemoteFunction", -- "equip/unequip pet <id>"
 	Rebirth = "RemoteFunction", -- "I want to rebirth"
@@ -54,6 +57,8 @@ local DEFINITIONS = {
 	SanctuaryUpdate = "RemoteEvent", -- your sanctuary state changed (re-render build UI)
 	QuestDialog = "RemoteEvent", -- a guide NPC starts talking (open dialog UI)
 	QuestUpdate = "RemoteEvent", -- active quests / progress changed (HUD tracker)
+	PotionsUpdate = "RemoteEvent", -- patch 5: potion inventory changed
+	TraderDialog = "RemoteEvent", -- patch 5: trader shop opens (stock + timer)
 }
 
 local Remotes = {}

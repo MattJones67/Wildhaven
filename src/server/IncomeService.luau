@@ -4,7 +4,7 @@
 	Slice 3 rule: revenue comes ONLY from EQUIPPED pets. The whole formula
 	(equipped pets * upgrades * rebirth * index bonuses) lives in
 	PlayerStats.getIncomePerSecond — this service just applies it per tick
-	via DataService.grantCoins (which also feeds TotalEarned for rebirth).
+	via DataService.grantSilver (which also feeds TotalEarned for rebirth).
 
 	Also answers GetState — the client's one big snapshot on join.
 ]]
@@ -27,10 +27,11 @@ function IncomeService.pushState(player: Player)
 		return
 	end
 	Remotes.StateUpdate:FireClient(player, {
-		Coins = math.floor(data.Coins),
+		Silver = math.floor(data.Silver),
+		Gold = data.Gold,
 		IncomePerSecond = PlayerStats.getIncomePerSecond(player),
 		LuckMultiplier = math.floor(PlayerStats.getLuck(player) * 100 + 0.5) / 100,
-		LuckSecondsLeft = DataService.getLuckSecondsLeft(player),
+		Buffs = PlayerStats.getBuffsPayload(player), -- active potion timers
 		TotalEarned = math.floor(data.TotalEarned),
 		NextRebirthRequirement = PlayerStats.getNextRebirthRequirement(player),
 		Rebirths = data.Rebirths,
@@ -48,10 +49,12 @@ function IncomeService.init()
 			return nil
 		end
 		return {
-			Coins = math.floor(data.Coins),
+			Silver = math.floor(data.Silver),
+			Gold = data.Gold,
 			IncomePerSecond = PlayerStats.getIncomePerSecond(player),
 			LuckMultiplier = math.floor(PlayerStats.getLuck(player) * 100 + 0.5) / 100,
-			LuckSecondsLeft = DataService.getLuckSecondsLeft(player),
+			Buffs = PlayerStats.getBuffsPayload(player),
+			Potions = data.Potions, -- potion inventory (key -> count)
 			Collection = data.Collection,
 			EggInventory = data.EggInventory,
 			EggCapacity = PlayerStats.getEggCapacity(player),
@@ -81,7 +84,7 @@ function IncomeService.init()
 			for player in DataService.getAllLoaded() do
 				local income = PlayerStats.getIncomePerSecond(player)
 				if income > 0 then
-					DataService.grantCoins(player, income * GameConfig.Income.TickSeconds)
+					DataService.grantSilver(player, income * GameConfig.Income.TickSeconds)
 				end
 				IncomeService.pushState(player)
 			end

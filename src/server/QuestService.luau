@@ -28,14 +28,13 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage.GameConfig)
-local IndexUtil = require(ReplicatedStorage.IndexUtil)
 local Remotes = require(ReplicatedStorage.Remotes)
 
 local BiomeGenerator = require(script.Parent.BiomeGenerator)
 local DataService = require(script.Parent.DataService)
 local EggSpawnService = require(script.Parent.EggSpawnService)
 local HatchService = require(script.Parent.HatchService)
-local IncomeService = require(script.Parent.IncomeService)
+local Rewards = require(script.Parent.Rewards)
 
 local QUESTS = GameConfig.Quests
 
@@ -101,17 +100,9 @@ local function questStatus(quests, quest): string
 	return "available"
 end
 
+-- Patch 5: reward text + granting both live in the shared Rewards module
 local function rewardText(reward): string
-	if reward.Coins then
-		return reward.Coins .. " 🪙"
-	elseif reward.LuckBoost then
-		return "🍀 Luck Boost"
-	elseif reward.ClassToken then
-		return "🎟 Class Token"
-	elseif reward.Pet then
-		return "🐾 " .. reward.Pet
-	end
-	return "?"
+	return Rewards.text(reward)
 end
 
 -- ------------------------------------------------------------
@@ -190,39 +181,10 @@ end
 -- Rewards
 -- ------------------------------------------------------------
 
+-- Patch 5: quests hand their (possibly multi-part) reward bundles to the
+-- shared Rewards module — same behavior as codes, blocks, and the trader.
 local function grantReward(player: Player, reward)
-	local data = DataService.get(player)
-	if not data then
-		return
-	end
-	if reward.Coins then
-		data.Coins += reward.Coins
-		data.TotalEarned += reward.Coins -- quest coins count toward rebirth
-	elseif reward.LuckBoost then
-		data.LuckEndsAt = os.time() + GameConfig.LuckBoost.DurationSeconds
-	elseif reward.ClassToken then
-		data.ClassTokens = (data.ClassTokens or 0) + reward.ClassToken
-	elseif reward.Pet then
-		-- A real pet, straight into the collection (with dex discovery)
-		local entry = { Id = data.NextPetId, Species = reward.Pet, Mutation = "None", Size = "Normal" }
-		data.NextPetId += 1
-		table.insert(data.Collection, entry)
-		Remotes.CollectionUpdate:FireClient(player, data.Collection)
-		if not data.Discovered[reward.Pet] then
-			data.Discovered[reward.Pet] = true
-			Remotes.IndexUpdate:FireClient(player, { Discovered = data.Discovered })
-			Remotes.Notify:FireClient(player, { Text = "📖 NEW PET: " .. reward.Pet .. "!", Kind = "Discovery" })
-			local rarity = GameConfig.AnimalByName[reward.Pet].Rarity
-			if IndexUtil.isSetComplete(data.Discovered, rarity) then
-				for _, indexReward in GameConfig.IndexRewards do
-					if indexReward.Rarity == rarity then
-						Remotes.Notify:FireClient(player, { Text = "🏆 SET COMPLETE! " .. indexReward.Label, Kind = "Discovery" })
-					end
-				end
-			end
-		end
-	end
-	IncomeService.pushState(player)
+	Rewards.grant(player, reward)
 end
 
 -- ------------------------------------------------------------
