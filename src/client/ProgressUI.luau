@@ -28,7 +28,7 @@ local ROW_COLOR = Color3.fromRGB(55, 62, 75)
 
 local ProgressUI = {}
 
-local handlersRef: { onRebirth: () -> () }
+local handlersRef: { onRebirth: () -> (), onRollClass: () -> () }
 
 -- Server-pushed state
 local totalEarned = 0
@@ -53,6 +53,18 @@ local popupTitle: TextLabel
 local popupBody: TextLabel
 local flashFrame: Frame
 local celebrateLabel: TextLabel
+
+-- Class UI (patch 4)
+local classChip: TextButton
+local classPanel: Frame
+local classNameLabel: TextLabel
+local classBlurbLabel: TextLabel
+local classRollButton: TextButton
+local className = ""
+local classTokens = 0
+local nextFreeRollIn = 0
+local classRolling = false -- suppress live updates while the spin plays
+local firstRollPromptShown = false
 
 local panels: { Frame } = {}
 
@@ -410,6 +422,28 @@ function ProgressUI.setState(state: { [string]: any })
 		rebirths = state.Rebirths
 	end
 	refreshRebirth()
+
+	-- Class fields (patch 4)
+	if state.Class ~= nil then
+		className = state.Class
+	end
+	if state.ClassTokens ~= nil then
+		classTokens = state.ClassTokens
+	end
+	if state.NextFreeRollIn ~= nil then
+		nextFreeRollIn = state.NextFreeRollIn
+	end
+	refreshClassUI()
+
+	-- First play: nudge new adventurers straight into their first roll
+	if className == "" and not firstRollPromptShown then
+		firstRollPromptShown = true
+		task.delay(2, function()
+			if className == "" then
+				classPanel.Visible = true
+			end
+		end)
+	end
 end
 
 -- The big moment: flash, banner, triumphant noise
@@ -438,6 +472,191 @@ function ProgressUI.celebrateRebirth(payload)
 		end)
 	end
 	rebirthPanel.Visible = false
+end
+
+-- ------------------------------------------------------------
+-- Classes (patch 4): chip + panel + the suspense roll
+-- ------------------------------------------------------------
+
+local TIER_COLORS = {
+	Common = Color3.fromRGB(210, 215, 225),
+	Rare = Color3.fromRGB(120, 170, 255),
+	Chase = Color3.fromRGB(255, 200, 90),
+}
+
+local function refreshClassUI()
+	if classRolling then
+		return -- don't spoil the spin
+	end
+	local class = GameConfig.ClassByName[className]
+	if class then
+		classChip.Text = "🎭 " .. className
+		classChip.BackgroundColor3 = class.Color:Lerp(Color3.fromRGB(40, 45, 55), 0.55)
+		classNameLabel.Text = className
+		classNameLabel.TextColor3 = class.Color
+		classBlurbLabel.Text = class.Blurb
+	else
+		classChip.Text = "🎭 Roll a class!"
+		classChip.BackgroundColor3 = Color3.fromRGB(160, 110, 190)
+		classNameLabel.Text = "???"
+		classNameLabel.TextColor3 = Color3.fromRGB(190, 195, 205)
+		classBlurbLabel.Text = "Every adventurer has a calling. Roll to find yours!"
+	end
+	-- Roll button label mirrors the server's payment ladder
+	if className == "" then
+		classRollButton.Text = "🎲 FIRST ROLL — FREE!"
+		classRollButton.BackgroundColor3 = Color3.fromRGB(95, 200, 90)
+	elseif classTokens > 0 then
+		classRollButton.Text = ("🎟 Roll (%d token%s)"):format(classTokens, classTokens > 1 and "s" or "")
+		classRollButton.BackgroundColor3 = Color3.fromRGB(200, 150, 90)
+	elseif nextFreeRollIn <= 0 then
+		classRollButton.Text = "🎲 FREE DAILY ROLL!"
+		classRollButton.BackgroundColor3 = Color3.fromRGB(95, 200, 90)
+	else
+		local hours = math.floor(nextFreeRollIn / 3600)
+		local minutes = math.floor((nextFreeRollIn % 3600) / 60)
+		classRollButton.Text = ("🎲 %s 🪙  (free in %dh %dm)"):format(comma(GameConfig.Classes.RerollCost), hours, minutes)
+		classRollButton.BackgroundColor3 = Color3.fromRGB(90, 140, 200)
+	end
+end
+
+local function buildClass()
+	-- Chip under the 📖 index button
+	classChip = makeButton(gui, {
+		Position = UDim2.new(0, 12, 0, 164),
+		Size = UDim2.new(0, 140, 0, 44),
+		BackgroundColor3 = Color3.fromRGB(160, 110, 190),
+		Text = "🎭 …",
+	})
+	stroke(classChip, Color3.fromRGB(60, 45, 75), 3)
+
+	classPanel = makePanel("🎭 Your Class")
+
+	classNameLabel = makeLabel(classPanel, {
+		Position = UDim2.new(0, 16, 0, 48),
+		Size = UDim2.new(1, -32, 0, 44),
+		Text = "???",
+		TextColor3 = Color3.new(1, 1, 1),
+	})
+	classBlurbLabel = makeLabel(classPanel, {
+		Position = UDim2.new(0, 16, 0, 94),
+		Size = UDim2.new(1, -32, 0, 28),
+		Text = "",
+		TextColor3 = Color3.fromRGB(210, 216, 226),
+	})
+
+	-- The odds board: every class, tier-colored, with its true chance
+	local listFrame = Instance.new("ScrollingFrame")
+	listFrame.Position = UDim2.new(0, 16, 0, 130)
+	listFrame.Size = UDim2.new(1, -32, 1, -224)
+	listFrame.BackgroundTransparency = 1
+	listFrame.BorderSizePixel = 0
+	listFrame.ScrollBarThickness = 5
+	listFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	listFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+	listFrame.Parent = classPanel
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.Padding = UDim.new(0, 4)
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.Parent = listFrame
+
+	local totalWeight = 0
+	for _, class in GameConfig.Classes.List do
+		totalWeight += class.Weight
+	end
+	for order, class in GameConfig.Classes.List do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -8, 0, 34)
+		row.BackgroundColor3 = ROW_COLOR
+		row.LayoutOrder = order
+		row.Parent = listFrame
+		round(row, 8)
+		makeLabel(row, {
+			Position = UDim2.new(0, 8, 0, 4),
+			Size = UDim2.new(0.34, 0, 1, -8),
+			Text = class.Name,
+			TextColor3 = class.Color,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+		makeLabel(row, {
+			Position = UDim2.new(0.35, 0, 0, 6),
+			Size = UDim2.new(0.47, 0, 1, -12),
+			Text = class.Blurb,
+			TextColor3 = Color3.fromRGB(200, 206, 216),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+		makeLabel(row, {
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -8, 0, 6),
+			Size = UDim2.new(0.16, 0, 1, -12),
+			Text = ("%.1f%%"):format(class.Weight / totalWeight * 100),
+			TextColor3 = TIER_COLORS[class.Tier] or Color3.new(1, 1, 1),
+			TextXAlignment = Enum.TextXAlignment.Right,
+		})
+	end
+
+	classRollButton = makeButton(classPanel, {
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -14),
+		Size = UDim2.new(0, 300, 0, 62),
+		BackgroundColor3 = Color3.fromRGB(95, 200, 90),
+		Text = "🎲 ROLL",
+	})
+	classRollButton.Activated:Connect(function()
+		if not classRolling then
+			handlersRef.onRollClass()
+		end
+	end)
+
+	classChip.Activated:Connect(function()
+		togglePanel(classPanel)
+	end)
+end
+
+-- The suspense spin: names flicker past, slowing down, then the reveal.
+-- Angel/Demon (Chase tier) get the full flash + banner + fanfare.
+function ProgressUI.playClassRoll(result: { Class: string, Tier: string, Blurb: string })
+	classRolling = true
+	classPanel.Visible = true
+	task.spawn(function()
+		local names = GameConfig.Classes.List
+		local delayTime = 0.06
+		while delayTime < 0.34 do
+			local pick = names[math.random(1, #names)]
+			classNameLabel.Text = pick.Name
+			classNameLabel.TextColor3 = pick.Color
+			classBlurbLabel.Text = "..."
+			Sounds.buttonPress()
+			task.wait(delayTime)
+			delayTime *= 1.22
+		end
+		task.wait(0.25) -- the held breath
+
+		classRolling = false
+		className = result.Class
+		refreshClassUI()
+
+		local class = GameConfig.ClassByName[result.Class]
+		if result.Tier == "Chase" then
+			flashFrame.BackgroundTransparency = 0.1
+			TweenService:Create(flashFrame, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 1 }):Play()
+			celebrateLabel.Text = (result.Class == "Angel" and "😇 " or "😈 ") .. result.Class:upper() .. "!"
+			celebrateLabel.TextColor3 = class and class.Color or Color3.new(1, 1, 1)
+			celebrateLabel.Visible = true
+			local scale = celebrateLabel:FindFirstChildOfClass("UIScale") :: UIScale
+			scale.Scale = 0.05
+			TweenService:Create(scale, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+			Sounds.mythicAnnounce()
+			Sounds.raritySting(6)
+			task.delay(2.4, function()
+				celebrateLabel.Visible = false
+			end)
+		elseif result.Tier == "Rare" then
+			Sounds.raritySting(4)
+		else
+			Sounds.raritySting(2)
+		end
+	end)
 end
 
 -- ------------------------------------------------------------
@@ -551,8 +770,10 @@ function ProgressUI.init(handlers: { onRebirth: () -> () })
 	buildDex()
 	buildRebirth()
 	buildPopups()
+	buildClass()
 	refreshDex()
 	refreshRebirth()
+	refreshClassUI()
 
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 end

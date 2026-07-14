@@ -34,6 +34,10 @@ function IncomeService.pushState(player: Player)
 		TotalEarned = math.floor(data.TotalEarned),
 		NextRebirthRequirement = PlayerStats.getNextRebirthRequirement(player),
 		Rebirths = data.Rebirths,
+		-- patch 4 (classes): the HUD chip + roll button state live off these
+		Class = data.Class,
+		ClassTokens = data.ClassTokens or 0,
+		NextFreeRollIn = math.max(0, (data.LastClassRollAt or 0) + GameConfig.Classes.FreeRollCooldownSeconds - os.time()),
 	})
 end
 
@@ -63,6 +67,10 @@ function IncomeService.init()
 			AutoHatchUnlocked = PlayerStats.hasAutoHatch(player),
 			AutoHatchEnabled = data.AutoHatch,
 			Goal = GoalService.payload(player),
+			-- patch 4 (classes):
+			Class = data.Class,
+			ClassTokens = data.ClassTokens or 0,
+			NextFreeRollIn = math.max(0, (data.LastClassRollAt or 0) + GameConfig.Classes.FreeRollCooldownSeconds - os.time()),
 		}
 	end
 

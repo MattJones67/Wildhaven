@@ -30,6 +30,11 @@ local DEFINITIONS = {
 	PlacePet = "RemoteFunction", -- "put pet <id> into habitat <uid>"
 	UnplacePet = "RemoteFunction", -- "take pet <id> out of my sanctuary"
 	RelocatePlot = "RemoteFunction", -- "move my whole plot to <biome>"
+	RollClass = "RemoteFunction", -- "roll (or re-roll) my class"
+	-- patch 4: guide NPC quests
+	AcceptQuest = "RemoteFunction", -- "I accept quest <id>"
+	TurnInQuest = "RemoteFunction", -- "I finished quest <id>, pay up"
+	GetQuests = "RemoteFunction", -- active-quest tracker snapshot, on join
 
 	-- server -> client pushes (client just renders these)
 	StateUpdate = "RemoteEvent", -- coins / income / luck every tick
@@ -47,6 +52,8 @@ local DEFINITIONS = {
 	WelcomeBack = "RemoteEvent", -- offline earnings popup on join
 	DailyReward = "RemoteEvent", -- daily login reward popup
 	SanctuaryUpdate = "RemoteEvent", -- your sanctuary state changed (re-render build UI)
+	QuestDialog = "RemoteEvent", -- a guide NPC starts talking (open dialog UI)
+	QuestUpdate = "RemoteEvent", -- active quests / progress changed (HUD tracker)
 }
 
 local Remotes = {}

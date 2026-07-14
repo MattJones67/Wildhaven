@@ -24,6 +24,7 @@ local EggFXController = require(script.EggFXController)
 local HatchRevealController = require(script.HatchRevealController)
 local PetFollowController = require(script.PetFollowController)
 local ProgressUI = require(script.ProgressUI)
+local QuestUI = require(script.QuestUI)
 local Sounds = require(script.Sounds)
 local UIController = require(script.UIController)
 
@@ -99,6 +100,13 @@ end, function(result)
 	UIController.showToast(result.Enabled and "🤖 Auto-Hatch ON" or "Auto-Hatch off")
 end)
 
+local requestRollClass = makeAction(function()
+	return Remotes.RollClass:InvokeServer()
+end, function(result)
+	UIController.setState({ Coins = result.Coins })
+	ProgressUI.playClassRoll(result) -- the suspense spin + reveal
+end)
+
 -- ------------------------------------------------------------
 -- Boot
 -- ------------------------------------------------------------
@@ -112,12 +120,14 @@ UIController.init({
 })
 ProgressUI.init({
 	onRebirth = requestRebirth,
+	onRollClass = requestRollClass,
 })
 HatchRevealController.init()
 EggFXController.init()
 PetFollowController.init()
 BiomeWallController.init()
 BuildController.init()
+QuestUI.init()
 
 -- Live updates pushed by the server
 Remotes.StateUpdate.OnClientEvent:Connect(function(state)
@@ -131,6 +141,12 @@ Remotes.CollectionUpdate.OnClientEvent:Connect(function(collection)
 end)
 Remotes.SanctuaryUpdate.OnClientEvent:Connect(function(payload)
 	BuildController.setSanctuary(payload)
+end)
+Remotes.QuestDialog.OnClientEvent:Connect(function(payload)
+	QuestUI.open(payload)
+end)
+Remotes.QuestUpdate.OnClientEvent:Connect(function(payload)
+	QuestUI.setTracker(payload)
 end)
 Remotes.EggInventoryUpdate.OnClientEvent:Connect(function(payload)
 	UIController.setEggInventory(payload.Inventory, payload.Capacity)
@@ -158,6 +174,8 @@ Remotes.Notify.OnClientEvent:Connect(function(payload)
 		Sounds.raritySting(2)
 	elseif payload.Kind == "Discovery" then
 		Sounds.hatchReady()
+	elseif payload.Kind == "Quest" then
+		Sounds.coinBlip() -- the soft objective-tick pop
 	end
 end)
 Remotes.HatchComplete.OnClientEvent:Connect(function(result)
@@ -201,6 +219,12 @@ end
 local initialSanctuary = Remotes.GetSanctuary:InvokeServer()
 if initialSanctuary then
 	BuildController.setSanctuary(initialSanctuary)
+end
+
+-- Active-quest tracker snapshot
+local initialQuests = Remotes.GetQuests:InvokeServer()
+if initialQuests then
+	QuestUI.setTracker(initialQuests)
 end
 
 print("[Wildhaven] Client ready 🐿️")
