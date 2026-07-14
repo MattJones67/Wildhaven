@@ -49,6 +49,23 @@ function PlayerStats.hasAutoHatch(player: Player): boolean
 	return data ~= nil and rebirthUnlockCount(data, "AutoHatch") > 0
 end
 
+-- Sanctuary caps (patch 4): both are plain upgrade values
+function PlayerStats.getSanctuaryObjectCap(player: Player): number
+	local data = DataService.get(player)
+	if not data then
+		return 0
+	end
+	return upgradeValue(data, "SanctuarySize")
+end
+
+function PlayerStats.getSanctuaryPetCap(player: Player): number
+	local data = DataService.get(player)
+	if not data then
+		return 0
+	end
+	return upgradeValue(data, "SanctuaryPets")
+end
+
 -- Patch 4 perk sources: the biome hosting your sanctuary, and your class.
 -- Both return neutral values when unset, so they're safe everywhere.
 local function plotPerk(data): { Income: number?, Luck: number?, HatchSpeed: number? }
@@ -86,7 +103,56 @@ function PlayerStats.getMutationLuck(player: Player): number
 	return classPerks(data).MutationChance or 1
 end
 
--- Coins/sec from EQUIPPED pets only (the slice-3 rule), fully multiplied
+-- Sanctuary earnings (patch 4): pets placed into habitats earn ON TOP of
+-- equipped pets. Matched-habitat pets earn x MatchedHabitatBonus, and a
+-- cohesive theme (enough same-biome objects) adds the theme multiplier.
+local function sanctuaryIncome(data): number
+	local sanct = data.Sanctuary
+	if not sanct or not sanct.PlacedPets then
+		return 0
+	end
+	local byId = {}
+	for _, entry in data.Collection do
+		if entry.Id then
+			byId[entry.Id] = entry
+		end
+	end
+	-- How many placed objects belong to each biome theme?
+	local themeCounts = {}
+	for _, object in sanct.Objects or {} do
+		local def = GameConfig.SanctuaryObjectByKey[object.Key]
+		if def and def.Biome then
+			themeCounts[def.Biome] = (themeCounts[def.Biome] or 0) + 1
+		end
+	end
+	local objectsByUid = {}
+	for _, object in sanct.Objects or {} do
+		objectsByUid[object.Uid] = object
+	end
+
+	local total = 0
+	local theme = GameConfig.Sanctuary.ThemeBonus
+	for _, placed in sanct.PlacedPets do
+		local entry = byId[placed.PetId]
+		local object = objectsByUid[placed.ObjectUid]
+		local objectDef = object and GameConfig.SanctuaryObjectByKey[object.Key]
+		if entry and objectDef then
+			local income = RollUtil.incomeForEntry(entry)
+			local animal = GameConfig.AnimalByName[entry.Species]
+			local petBiome = animal and animal.Biome
+			if petBiome and objectDef.Biome == petBiome then
+				income *= GameConfig.Sanctuary.MatchedHabitatBonus
+				if (themeCounts[petBiome] or 0) >= theme.MinSameBiomeObjects then
+					income *= theme.Mult
+				end
+			end
+			total += income
+		end
+	end
+	return total
+end
+
+-- Coins/sec = EQUIPPED pets + SANCTUARY-placed pets, fully multiplied
 function PlayerStats.getIncomePerSecond(player: Player): number
 	local data = DataService.get(player)
 	if not data then
@@ -103,6 +169,7 @@ function PlayerStats.getIncomePerSecond(player: Player): number
 			base += RollUtil.incomeForEntry(entry)
 		end
 	end
+	base += sanctuaryIncome(data)
 
 	local upgradeMult = upgradeValue(data, "IncomeBoost")
 	local rebirthMult = 1 + REBIRTH.IncomePerRebirth * (data.Rebirths or 0)

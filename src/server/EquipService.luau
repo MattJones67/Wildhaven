@@ -117,6 +117,13 @@ local function onToggleEquip(player: Player, petId: any)
 	if #data.Equipped >= PlayerStats.getEquipSlots(player) then
 		return { Success = false, Error = "No free equip slots!" }
 	end
+	-- SECURITY CHECK 4 (patch 4): a pet living in the sanctuary can't ALSO
+	-- follow you around — that would double-earn.
+	for _, placed in (data.Sanctuary and data.Sanctuary.PlacedPets or {}) do
+		if placed.PetId == petId then
+			return { Success = false, Error = "That pet lives in your sanctuary!" }
+		end
+	end
 	table.insert(data.Equipped, petId)
 
 	EquipService.pushEquipped(player)

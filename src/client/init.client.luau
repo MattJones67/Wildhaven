@@ -18,6 +18,8 @@ local AnimalModels = require(ReplicatedStorage.AnimalModels)
 local GameConfig = require(ReplicatedStorage.GameConfig)
 local Remotes = require(ReplicatedStorage.Remotes)
 
+local BiomeWallController = require(script.BiomeWallController)
+local BuildController = require(script.BuildController)
 local EggFXController = require(script.EggFXController)
 local HatchRevealController = require(script.HatchRevealController)
 local PetFollowController = require(script.PetFollowController)
@@ -114,14 +116,21 @@ ProgressUI.init({
 HatchRevealController.init()
 EggFXController.init()
 PetFollowController.init()
+BiomeWallController.init()
+BuildController.init()
 
 -- Live updates pushed by the server
 Remotes.StateUpdate.OnClientEvent:Connect(function(state)
 	UIController.setState(state)
 	ProgressUI.setState(state)
+	BiomeWallController.setState(state) -- gate walls react to progression
 end)
 Remotes.CollectionUpdate.OnClientEvent:Connect(function(collection)
 	UIController.setCollection(collection)
+	BuildController.setCollection(collection)
+end)
+Remotes.SanctuaryUpdate.OnClientEvent:Connect(function(payload)
+	BuildController.setSanctuary(payload)
 end)
 Remotes.EggInventoryUpdate.OnClientEvent:Connect(function(payload)
 	UIController.setEggInventory(payload.Inventory, payload.Capacity)
@@ -131,6 +140,7 @@ Remotes.UpgradesUpdate.OnClientEvent:Connect(function(payload)
 end)
 Remotes.EquipUpdate.OnClientEvent:Connect(function(payload)
 	UIController.setEquipped(payload)
+	BuildController.setEquipped(payload)
 end)
 Remotes.IndexUpdate.OnClientEvent:Connect(function(payload)
 	ProgressUI.setDiscovered(payload.Discovered)
@@ -175,6 +185,9 @@ local initialState = Remotes.GetState:InvokeServer()
 if initialState then
 	UIController.setState(initialState)
 	UIController.setCollection(initialState.Collection)
+	BuildController.setCollection(initialState.Collection)
+	BuildController.setEquipped({ Equipped = initialState.Equipped })
+	BiomeWallController.setState(initialState)
 	UIController.setEggInventory(initialState.EggInventory, initialState.EggCapacity)
 	UIController.setUpgrades({ Upgrades = initialState.Upgrades, EggCapacity = initialState.EggCapacity, EquipSlots = initialState.EquipSlots })
 	UIController.setEquipped({ Equipped = initialState.Equipped, Slots = initialState.EquipSlots })
@@ -182,6 +195,12 @@ if initialState then
 	ProgressUI.setState(initialState)
 	ProgressUI.setDiscovered(initialState.Discovered)
 	ProgressUI.setGoal(initialState.Goal)
+end
+
+-- Sanctuary snapshot (separate remote; SanctuaryService owns it)
+local initialSanctuary = Remotes.GetSanctuary:InvokeServer()
+if initialSanctuary then
+	BuildController.setSanctuary(initialSanctuary)
 end
 
 print("[Wildhaven] Client ready 🐿️")

@@ -74,7 +74,50 @@ local function onTravel(player: Player, destination: string)
 	})
 end
 
+-- SECURITY: the walls are only solid CLIENT-side (per-player collision),
+-- so a hacked client can walk through them. This loop is the authority:
+-- anyone standing in a biome they haven't unlocked gets sent home.
+local function enforceGates()
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not root then
+			continue
+		end
+		local biomeName = BiomeGenerator.getBiomeAt(root.Position)
+		local biome = GameConfig.BiomeByName[biomeName]
+		if biomeName == "Forest" or not biome then
+			continue
+		end
+		-- Only counts as "inside" within the biome's gated area
+		local flatDistance = (Vector3.new(root.Position.X, 0, root.Position.Z)
+			- Vector3.new(biome.Center.X, 0, biome.Center.Z)).Magnitude
+		local insideRadius = biome.WallRadius or biome.Radius + 40
+		if flatDistance > insideRadius then
+			continue
+		end
+		local unlocked = BiomeService.isUnlocked(player, biomeName)
+		if not unlocked then
+			local home = BiomeGenerator.getTravelTarget("Forest")
+			if home then
+				root.CFrame = home
+				Remotes.Notify:FireClient(player, {
+					Text = "🔒 " .. biomeName .. " — " .. biome.GateText,
+					Kind = "Error",
+				})
+			end
+		end
+	end
+end
+
 function BiomeService.init()
+	task.spawn(function()
+		while true do
+			task.wait(2)
+			enforceGates()
+		end
+	end)
+
 	for _, pillar in BiomeGenerator.getTravelPillars() do
 		local biome = GameConfig.BiomeByName[pillar.Dest]
 		local prompt = Instance.new("ProximityPrompt")

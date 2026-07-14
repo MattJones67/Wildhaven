@@ -22,6 +22,14 @@ local DEFINITIONS = {
 	ToggleEquip = "RemoteFunction", -- "equip/unequip pet <id>"
 	Rebirth = "RemoteFunction", -- "I want to rebirth"
 	ToggleAutoHatch = "RemoteFunction", -- "turn auto-hatch on/off"
+	-- patch 4: sanctuary building (every one server-validated)
+	GetSanctuary = "RemoteFunction", -- full sanctuary snapshot (join / rebuild)
+	PlaceObject = "RemoteFunction", -- "place <key> at (x,z) rotated r"
+	MoveObject = "RemoteFunction", -- "move object <uid> to (x,z,r)"
+	DeleteObject = "RemoteFunction", -- "delete object <uid>"
+	PlacePet = "RemoteFunction", -- "put pet <id> into habitat <uid>"
+	UnplacePet = "RemoteFunction", -- "take pet <id> out of my sanctuary"
+	RelocatePlot = "RemoteFunction", -- "move my whole plot to <biome>"
 
 	-- server -> client pushes (client just renders these)
 	StateUpdate = "RemoteEvent", -- coins / income / luck every tick
@@ -38,6 +46,7 @@ local DEFINITIONS = {
 	RebirthCelebrate = "RemoteEvent", -- big rebirth celebration trigger
 	WelcomeBack = "RemoteEvent", -- offline earnings popup on join
 	DailyReward = "RemoteEvent", -- daily login reward popup
+	SanctuaryUpdate = "RemoteEvent", -- your sanctuary state changed (re-render build UI)
 }
 
 local Remotes = {}

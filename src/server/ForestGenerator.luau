@@ -17,6 +17,7 @@ local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.GameConfig)
 local LandmarkBuilder = require(script.Parent.LandmarkBuilder)
+local TerrainForge = require(script.Parent.TerrainForge)
 
 local FOREST = GameConfig.Forest
 
@@ -75,14 +76,19 @@ local function isBlocked(pos: Vector3): boolean
 	return false
 end
 
--- A random unblocked point on the island (nil if we can't find one quickly)
+-- A random unblocked point in the forest, WITH its true ground height
+-- (the continent rework means the outer forest rolls into hills).
 local function randomOpenPoint(rng: Random, maxRadius: number?): Vector3?
 	for _ = 1, 30 do
 		local angle = rng:NextNumber(0, math.pi * 2)
 		local radius = math.sqrt(rng:NextNumber()) * (maxRadius or FOREST.IslandRadius - 14)
-		local pos = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+		local x, z = math.cos(angle) * radius, math.sin(angle) * radius
+		local pos = Vector3.new(x, 0, z)
 		if not isBlocked(pos) then
-			return pos
+			local height = TerrainForge.getHeightAt(x, z)
+			if height > 0.5 or radius < 170 then -- skip beach/waterline spots
+				return Vector3.new(x, math.max(height, 0), z)
+			end
 		end
 	end
 	return nil
@@ -95,12 +101,9 @@ end
 local function generateTerrain()
 	local terrain = workspace.Terrain
 
-	-- (The ocean itself is filled by BiomeGenerator.buildOcean() BEFORE this
-	-- runs, so every island's fills overwrite water, never the reverse.)
-
-	-- Beach ring (slightly lower), then the grass island on top
-	terrain:FillCylinder(CFrame.new(0, -4.5, 0), 8, FOREST.BeachRadius, Enum.Material.Sand)
-	terrain:FillCylinder(CFrame.new(0, -4, 0), 8, FOREST.IslandRadius, Enum.Material.Grass)
+	-- (The continent ground itself comes from TerrainForge, which runs
+	-- BEFORE this. Here we only carve the forest's water features and
+	-- paths into that ground — all inside the flat village core.)
 
 	-- Pond: carve a hole, part-fill with water
 	local pond = FOREST.PondCenter
@@ -177,20 +180,46 @@ local function standingCylinder(parent: Instance, height: number, diameter: numb
 	return part
 end
 
+-- Three tree species so copses read as a real mixed forest:
+-- round oaks, tall dark pines, and pale birches with amber crowns.
+local TREE_PALETTES = {
+	Oak = {
+		Trunk = Color3.fromRGB(115, 82, 58),
+		Leaves = { Color3.fromRGB(88, 158, 82), Color3.fromRGB(104, 176, 90), Color3.fromRGB(76, 145, 76) },
+	},
+	Pine = {
+		Trunk = Color3.fromRGB(95, 66, 48),
+		Leaves = { Color3.fromRGB(52, 110, 78), Color3.fromRGB(60, 122, 84), Color3.fromRGB(46, 98, 70) },
+	},
+	Birch = {
+		Trunk = Color3.fromRGB(215, 210, 200),
+		Leaves = { Color3.fromRGB(170, 175, 80), Color3.fromRGB(195, 165, 75), Color3.fromRGB(150, 160, 72) },
+	},
+}
+
 local function buildTree(parent: Instance, position: Vector3, rng: Random)
-	local scale = rng:NextNumber(0.7, 1.6)
-	local trunkHeight = 6 * scale
-	standingCylinder(parent, trunkHeight, 1.4 * scale, Color3.fromRGB(115, 82, 58),
+	local roll = rng:NextNumber()
+	local species = roll < 0.5 and "Oak" or roll < 0.8 and "Pine" or "Birch"
+	local palette = TREE_PALETTES[species]
+	local scale = rng:NextNumber(0.7, species == "Pine" and 2 or 1.6)
+	local trunkHeight = (species == "Pine" and 9 or 6) * scale
+
+	standingCylinder(parent, trunkHeight, (species == "Birch" and 1 or 1.4) * scale, palette.Trunk,
 		position + Vector3.new(0, trunkHeight / 2, 0), Enum.Material.Wood)
-	local leafColors = {
-		Color3.fromRGB(88, 158, 82),
-		Color3.fromRGB(104, 176, 90),
-		Color3.fromRGB(76, 145, 76),
-	}
-	for i, color in leafColors do
-		local offset = Vector3.new(rng:NextNumber(-1.8, 1.8), trunkHeight + (i - 1) * 1.4 * scale, rng:NextNumber(-1.8, 1.8))
-		local blobSize = (6 - i) * scale + 1.5
-		makeBall(parent, Vector3.new(blobSize, blobSize * 0.8, blobSize), color, CFrame.new(position + offset), Enum.Material.Grass)
+
+	if species == "Pine" then
+		-- Stacked shrinking cones (fat balls) up the trunk
+		for layer = 0, 3 do
+			local blobSize = (6.5 - layer * 1.4) * scale
+			makeBall(parent, Vector3.new(blobSize, blobSize * 0.75, blobSize), palette.Leaves[layer % 3 + 1],
+				CFrame.new(position + Vector3.new(0, trunkHeight * 0.55 + layer * 2.2 * scale, 0)), Enum.Material.Grass)
+		end
+	else
+		for i, color in palette.Leaves do
+			local offset = Vector3.new(rng:NextNumber(-1.8, 1.8), trunkHeight + (i - 1) * 1.4 * scale, rng:NextNumber(-1.8, 1.8))
+			local blobSize = (6 - i) * scale + 1.5
+			makeBall(parent, Vector3.new(blobSize, blobSize * 0.8, blobSize), color, CFrame.new(position + offset), Enum.Material.Grass)
+		end
 	end
 end
 

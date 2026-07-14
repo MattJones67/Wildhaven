@@ -1,27 +1,33 @@
 --[[
-	BiomeGenerator — patch 4's new islands: Desert, Tundra, Volcanic, and
-	the floating Sky Isles, each with its own terrain material, themed props,
-	egg spawn points, sanctuary plot pads, a guide NPC, and a travel stone.
+	BiomeGenerator — decorates the continent TerrainForge sculpted, region
+	by region, and floats the Sky Isles:
 
-	It also adds the Forest's patch-4 furniture (travel hub by the village
-	spawn, forest guide, forest sanctuary pads) — the Forest itself is still
-	ForestGenerator's job.
+	  * Desert: cactus stands, weathered ruins, and TWO stepped pyramids
+	    with dark doorways (egg spawns hide by them)
+	  * Tundra: snowy pines, ice spikes, giant translucent ICE WALL slabs
+	    up in the mountain ring, and a frozen pond
+	  * Volcanic: obsidian spikes, ember vents, crater-rim smoke, and two
+	    glowing lava falls running down the volcano's flank
+	  * Sky: three floating grass discs, plank bridges, clouds, crystals
 
-	Everything is seeded and driven by GameConfig.Biomes, so islands are
-	identical every server and positions are one-constant nudges.
+	Every prop asks TerrainForge.getHeightAt for its ground, so it all sits
+	on the real slopes. It also builds the shared furniture: travel hubs,
+	guide NPCs, sanctuary pads (positions straight from GameConfig), and
+	the translucent GATE WALL rings around locked biomes (BiomeService
+	enforces them; BiomeWallController makes them solid locally for locked
+	players).
 
-	Exposes the lookups other services need:
-	  getEggSpawnPoints(biome)  -> curated points (Forest delegates to ForestGenerator)
-	  getTravelTarget(biome)    -> CFrame to teleport arrivals to
-	  getTravelPillars()        -> { {Dest, Part} } for BiomeService to add prompts
-	  getSanctuaryPlots(biome)  -> plot CFrames (SanctuaryService claims these)
-	  getGuidePrompt(biome)     -> the NPC's ProximityPrompt (QuestService wires it)
-	  getBiomeAt(position)      -> which biome a world position belongs to
+	Exposes the lookups other services need — same API as before:
+	  getEggSpawnPoints / getTravelTarget / getTravelPillars /
+	  getSanctuaryPlots / getGuidePrompt / getBiomeAt
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local GameConfig = require(ReplicatedStorage.GameConfig)
 local ForestGenerator = require(script.Parent.ForestGenerator)
+local TerrainForge = require(script.Parent.TerrainForge)
 
 local BiomeGenerator = {}
 
@@ -32,7 +38,7 @@ local sanctuaryPlots: { [string]: { CFrame } } = {}
 local guidePrompts: { [string]: ProximityPrompt } = {}
 
 -- ------------------------------------------------------------
--- Part helpers (same conventions as the other builders)
+-- Part helpers
 -- ------------------------------------------------------------
 
 local function makePart(parent: Instance, props: { [string]: any }): Part
@@ -74,14 +80,34 @@ local function standingCylinder(parent: Instance, height: number, diameter: numb
 	return part
 end
 
+-- Ground height shorthand
+local function groundAt(x: number, z: number): number
+	return (TerrainForge.getHeightAt(x, z))
+end
+
+-- A random position inside a biome's region, on the ground, skipping water
+local function randomGroundPoint(biome, rng: Random, minR: number, maxR: number): Vector3?
+	for _ = 1, 15 do
+		local angle = rng:NextNumber(0, math.pi * 2)
+		local radius = rng:NextNumber(minR, maxR)
+		local x = biome.Center.X + math.cos(angle) * radius
+		local z = biome.Center.Z + math.sin(angle) * radius
+		local height = groundAt(x, z)
+		if height > 1 then
+			return Vector3.new(x, height, z)
+		end
+	end
+	return nil
+end
+
 -- ------------------------------------------------------------
--- Shared furniture: sanctuary pads, guide NPCs, travel stones
+-- Shared furniture: pads, guides, travel hubs, gate walls
 -- ------------------------------------------------------------
 
-local function buildSanctuaryPads(parent: Instance, biomeName: string, positions: { Vector3 })
-	sanctuaryPlots[biomeName] = {}
+local function buildSanctuaryPads(parent: Instance, biome)
+	sanctuaryPlots[biome.Name] = {}
 	local half = GameConfig.Sanctuary.PlotHalfSize
-	for _, pos in positions do
+	for _, pos in biome.PlotPositions do
 		makePart(parent, {
 			Name = "SanctuaryPad",
 			Size = Vector3.new(half * 2 + 2, 0.5, half * 2 + 2),
@@ -89,18 +115,8 @@ local function buildSanctuaryPads(parent: Instance, biomeName: string, positions
 			Material = Enum.Material.Slate,
 			CFrame = CFrame.new(pos + Vector3.new(0, 0.25, 0)),
 		})
-		table.insert(sanctuaryPlots[biomeName], CFrame.new(pos + Vector3.new(0, 0.5, 0)))
+		table.insert(sanctuaryPlots[biome.Name], CFrame.new(pos + Vector3.new(0, 0.5, 0)))
 	end
-end
-
--- Ring of pad positions around a center (the common island layout)
-local function padRing(center: Vector3, radius: number): { Vector3 }
-	local positions = {}
-	for i = 1, GameConfig.Sanctuary.PlotsPerBiome do
-		local angle = (i / GameConfig.Sanctuary.PlotsPerBiome) * math.pi * 2 + math.pi / 4
-		table.insert(positions, center + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius))
-	end
-	return positions
 end
 
 local function buildGuideNPC(parent: Instance, biomeName: string, position: Vector3)
@@ -118,7 +134,6 @@ local function buildGuideNPC(parent: Instance, biomeName: string, position: Vect
 		makeBall(npc, Vector3.new(0.3, 0.3, 0.2), Color3.new(1, 1, 1), headCF * CFrame.new(side * 0.25, 0.08, -0.5))
 		makeBall(npc, Vector3.new(0.14, 0.14, 0.1), Color3.fromRGB(30, 30, 35), headCF * CFrame.new(side * 0.25, 0.08, -0.58))
 	end
-	-- Big friendly hat in the biome color
 	standingCylinder(npc, 0.15, 2, biome.Color, position + Vector3.new(0, 3.45, 0)).CanCollide = false
 	makeBall(npc, Vector3.new(1, 0.6, 1), biome.Color, CFrame.new(position + Vector3.new(0, 3.7, 0)))
 
@@ -153,8 +168,6 @@ local function buildGuideNPC(parent: Instance, biomeName: string, position: Vect
 	npc.Parent = parent
 end
 
--- A travel hub: one glowing pillar per DESTINATION biome. BiomeService
--- attaches the prompts + gate checks (this module only builds the parts).
 local function buildTravelHub(parent: Instance, hereBiome: string, position: Vector3)
 	local hub = Instance.new("Model")
 	hub.Name = "TravelHub_" .. hereBiome
@@ -192,136 +205,302 @@ local function buildTravelHub(parent: Instance, hereBiome: string, position: Vec
 	hub.Parent = parent
 end
 
+-- Translucent gate-wall ring around a locked biome. Server-side these
+-- never collide (unlocked players walk straight through); the CLIENT
+-- turns collision on locally while the biome is locked for them, and
+-- BiomeService teleports out anyone who cheats past. ForceField material
+-- gives the shimmer "energy barrier" look for free.
+local function buildGateWall(parent: Instance, biome)
+	local radius = biome.WallRadius
+	if not radius then
+		return
+	end
+	local segments = 36
+	local arc = (2 * math.pi * radius) / segments
+	local wallFolder = Instance.new("Folder")
+	wallFolder.Name = "GateWall_" .. biome.Name
+
+	for i = 1, segments do
+		local angle = (i / segments) * math.pi * 2
+		local x = biome.Center.X + math.cos(angle) * radius
+		local z = biome.Center.Z + math.sin(angle) * radius
+		local wall = makePart(wallFolder, {
+			Name = "GateWall",
+			Size = Vector3.new(arc + 2, 110, 2),
+			Color = biome.Color,
+			Material = Enum.Material.ForceField,
+			Transparency = 0.85,
+			CanCollide = false, -- collision is applied LOCALLY per player
+			CFrame = CFrame.new(Vector3.new(x, 40, z), Vector3.new(biome.Center.X, 40, biome.Center.Z)),
+		})
+		CollectionService:AddTag(wall, "BiomeWall")
+		wall:SetAttribute("Biome", biome.Name)
+	end
+
+	-- Lock sign on the Forest-facing side so travelers know the deal
+	local toOrigin = (Vector3.zero - biome.Center) * Vector3.new(1, 0, 1)
+	local signPos = biome.Center + toOrigin.Unit * radius
+	local anchor = makePart(wallFolder, {
+		Size = Vector3.new(1, 1, 1),
+		Transparency = 1,
+		CanCollide = false,
+		CFrame = CFrame.new(signPos.X, groundAt(signPos.X, signPos.Z) + 9, signPos.Z),
+	})
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.new(0, 260, 0, 60)
+	billboard.MaxDistance = 220
+	billboard.Adornee = anchor
+	billboard.Parent = anchor
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.Text = "🔒 " .. biome.Emoji .. " " .. biome.Name .. "\n" .. biome.GateText
+	label.TextColor3 = biome.Color
+	label.Parent = billboard
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(20, 20, 25)
+	stroke.Thickness = 2.5
+	stroke.Parent = label
+	CollectionService:AddTag(anchor, "BiomeWallSign")
+	anchor:SetAttribute("Biome", biome.Name)
+
+	wallFolder.Parent = parent
+end
+
 -- ------------------------------------------------------------
--- Themed island builders
+-- Region decorators
 -- ------------------------------------------------------------
 
-local function collectRingPoints(biomeName: string, center: Vector3, rng: Random, count: number, minR: number, maxR: number)
+local function addEggPoint(biomeName: string, pos: Vector3)
 	eggPoints[biomeName] = eggPoints[biomeName] or {}
+	table.insert(eggPoints[biomeName], pos)
+end
+
+local function collectGroundPoints(biome, rng: Random, count: number, minR: number, maxR: number)
 	for _ = 1, count do
-		local angle = rng:NextNumber(0, math.pi * 2)
-		local radius = rng:NextNumber(minR, maxR)
-		table.insert(eggPoints[biomeName], center + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius))
+		local pos = randomGroundPoint(biome, rng, minR, maxR)
+		if pos then
+			addEggPoint(biome.Name, pos)
+		end
 	end
+end
+
+-- A stepped sandstone pyramid with a dark doorway — the desert's landmark.
+local function buildPyramid(parent: Instance, baseCenter: Vector3, tiers: number, baseWidth: number)
+	local sand = Color3.fromRGB(220, 192, 140)
+	local trim = Color3.fromRGB(190, 160, 110)
+	local tierHeight = 3.4
+	for tier = 0, tiers - 1 do
+		local width = baseWidth - tier * (baseWidth / tiers)
+		makePart(parent, {
+			Size = Vector3.new(width, tierHeight, width),
+			Color = tier % 2 == 0 and sand or trim,
+			Material = Enum.Material.Sandstone,
+			CFrame = CFrame.new(baseCenter + Vector3.new(0, tierHeight / 2 + tier * tierHeight, 0)),
+		})
+	end
+	-- Gold cap + dark doorway
+	makePart(parent, {
+		Size = Vector3.new(3, 2.6, 3),
+		Color = Color3.fromRGB(255, 210, 90),
+		Material = Enum.Material.Metal,
+		Reflectance = 0.3,
+		CFrame = CFrame.new(baseCenter + Vector3.new(0, tiers * tierHeight + 1.3, 0)) * CFrame.Angles(0, math.rad(45), 0),
+	})
+	makePart(parent, {
+		Size = Vector3.new(3.4, 4.4, 1.2),
+		Color = Color3.fromRGB(35, 30, 28),
+		Material = Enum.Material.Slate,
+		CanCollide = false,
+		CFrame = CFrame.new(baseCenter + Vector3.new(0, 2.2, -baseWidth / 2 - 0.2)),
+	})
+	addEggPoint("Desert", baseCenter + Vector3.new(0, 0, -baseWidth / 2 - 6))
 end
 
 local function buildDesert(parent: Instance, biome, rng: Random)
-	local c = biome.Center
-	workspace.Terrain:FillCylinder(CFrame.new(c.X, -4, c.Z), 8, 100, Enum.Material.Sand)
-	-- Dunes
-	for _ = 1, 8 do
-		local pos = c + Vector3.new(rng:NextNumber(-80, 80), 0, rng:NextNumber(-80, 80))
-		workspace.Terrain:FillBall(pos + Vector3.new(0, -2, 0), rng:NextNumber(6, 12), Enum.Material.Sand)
-	end
-	-- Cacti: trunk + two arms
-	for _ = 1, 10 do
-		local pos = c + Vector3.new(rng:NextNumber(-85, 85), 0, rng:NextNumber(-85, 85))
-		local height = rng:NextNumber(3, 5.5)
-		local green = Color3.fromRGB(90, 155, 80)
-		standingCylinder(parent, height, 1, green, pos + Vector3.new(0, height / 2, 0), Enum.Material.Grass)
-		for _, side in { -1, 1 } do
-			if rng:NextNumber() < 0.7 then
-				standingCylinder(parent, height * 0.4, 0.7, green, pos + Vector3.new(side * 0.85, height * 0.55, 0), Enum.Material.Grass)
+	-- Cactus stands
+	for _ = 1, 22 do
+		local pos = randomGroundPoint(biome, rng, 30, biome.Radius - 40)
+		if pos then
+			local height = rng:NextNumber(3, 6)
+			local green = Color3.fromRGB(90, 155, 80)
+			standingCylinder(parent, height, 1, green, pos + Vector3.new(0, height / 2, 0), Enum.Material.Grass)
+			for _, side in { -1, 1 } do
+				if rng:NextNumber() < 0.6 then
+					standingCylinder(parent, height * 0.4, 0.7, green, pos + Vector3.new(side * 0.85, height * 0.55, 0), Enum.Material.Grass)
+				end
 			end
 		end
 	end
-	-- Ruins: weathered pillars + a fallen arch
-	local ruins = c + Vector3.new(35, 0, -35)
-	for i = 1, 5 do
-		local angle = (i / 5) * math.pi * 2
-		local height = rng:NextNumber(3, 7)
-		standingCylinder(parent, height, 2, Color3.fromRGB(215, 190, 145), ruins + Vector3.new(math.cos(angle) * 8, height / 2, math.sin(angle) * 8), Enum.Material.Sandstone)
+	-- Weathered ruin circle
+	local ruinsX, ruinsZ = biome.Center.X + 60, biome.Center.Z - 70
+	local ruinsY = groundAt(ruinsX, ruinsZ)
+	for i = 1, 6 do
+		local angle = (i / 6) * math.pi * 2
+		local height = rng:NextNumber(3, 8)
+		standingCylinder(parent, height, 2, Color3.fromRGB(215, 190, 145),
+			Vector3.new(ruinsX + math.cos(angle) * 9, ruinsY + height / 2 - 0.5, ruinsZ + math.sin(angle) * 9), Enum.Material.Sandstone)
 	end
 	makePart(parent, {
-		Size = Vector3.new(10, 1.5, 2),
+		Size = Vector3.new(11, 1.5, 2),
 		Color = Color3.fromRGB(215, 190, 145),
 		Material = Enum.Material.Sandstone,
-		CFrame = CFrame.new(ruins + Vector3.new(0, 7.5, 0)) * CFrame.Angles(0, math.rad(20), math.rad(6)),
+		CFrame = CFrame.new(ruinsX, ruinsY + 8, ruinsZ) * CFrame.Angles(0, math.rad(25), math.rad(7)),
 	})
-	collectRingPoints(biome.Name, c, rng, 10, 20, 80)
-	table.insert(eggPoints[biome.Name], ruins + Vector3.new(0, 0, 4)) -- one by the ruins
+	addEggPoint("Desert", Vector3.new(ruinsX, ruinsY, ruinsZ))
+
+	-- THE pyramids (positions are constants — nudge freely)
+	local p1x, p1z = biome.Center.X + 110, biome.Center.Z + 80
+	local p2x, p2z = biome.Center.X - 40, biome.Center.Z - 120
+	buildPyramid(parent, Vector3.new(p1x, groundAt(p1x, p1z) - 0.5, p1z), 9, 46)
+	buildPyramid(parent, Vector3.new(p2x, groundAt(p2x, p2z) - 0.5, p2z), 6, 30)
+
+	-- Sun-bleached rocks
+	for _ = 1, 10 do
+		local pos = randomGroundPoint(biome, rng, 30, biome.Radius - 40)
+		if pos then
+			local size = rng:NextNumber(1.5, 4)
+			makeBall(parent, Vector3.new(size, size * 0.6, size), Color3.fromRGB(205, 185, 150),
+				CFrame.new(pos + Vector3.new(0, size * 0.2, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi), 0), Enum.Material.Sandstone)
+		end
+	end
+	collectGroundPoints(biome, rng, 12, 25, biome.Radius - 50)
 end
 
 local function buildTundra(parent: Instance, biome, rng: Random)
-	local c = biome.Center
-	workspace.Terrain:FillCylinder(CFrame.new(c.X, -4, c.Z), 8, 100, Enum.Material.Snow)
-	for _ = 1, 3 do
-		local pos = c + Vector3.new(rng:NextNumber(-60, 60), 0, rng:NextNumber(-60, 60))
-		workspace.Terrain:FillCylinder(CFrame.new(pos.X, -0.3, pos.Z), 1, rng:NextNumber(8, 14), Enum.Material.Glacier)
-	end
-	-- Snowy pines: trunk + white-dusted blobs
-	for _ = 1, 12 do
-		local pos = c + Vector3.new(rng:NextNumber(-85, 85), 0, rng:NextNumber(-85, 85))
-		local height = rng:NextNumber(4, 7)
-		standingCylinder(parent, height, 1, Color3.fromRGB(105, 78, 58), pos + Vector3.new(0, height / 2, 0), Enum.Material.Wood)
-		for layer = 0, 2 do
-			local size = 5 - layer * 1.3
-			makeBall(parent, Vector3.new(size, size * 0.6, size), Color3.fromRGB(70, 120, 95), CFrame.new(pos + Vector3.new(0, height + layer * 1.3, 0)), Enum.Material.Grass)
+	-- Snowy pines across the snowfields
+	for _ = 1, 18 do
+		local pos = randomGroundPoint(biome, rng, 25, 150)
+		if pos then
+			local height = rng:NextNumber(4, 8)
+			standingCylinder(parent, height, 1, Color3.fromRGB(105, 78, 58), pos + Vector3.new(0, height / 2, 0), Enum.Material.Wood)
+			for layer = 0, 2 do
+				local size = 5.5 - layer * 1.4
+				makeBall(parent, Vector3.new(size, size * 0.6, size), Color3.fromRGB(70, 120, 95),
+					CFrame.new(pos + Vector3.new(0, height + layer * 1.4, 0)), Enum.Material.Grass)
+			end
+			makeBall(parent, Vector3.new(2.2, 1, 2.2), Color3.fromRGB(240, 245, 250), CFrame.new(pos + Vector3.new(0, height + 3.6, 0)))
 		end
-		makeBall(parent, Vector3.new(2, 1, 2), Color3.fromRGB(240, 245, 250), CFrame.new(pos + Vector3.new(0, height + 3.2, 0)))
 	end
 	-- Ice spikes
-	for _ = 1, 8 do
-		local pos = c + Vector3.new(rng:NextNumber(-80, 80), 0, rng:NextNumber(-80, 80))
-		local height = rng:NextNumber(3, 8)
-		local spike = makeBall(parent, Vector3.new(1.6, height, 1.6), Color3.fromRGB(190, 230, 250), CFrame.new(pos + Vector3.new(0, height / 2, 0)) * CFrame.Angles(rng:NextNumber(-0.1, 0.1), 0, rng:NextNumber(-0.1, 0.1)), Enum.Material.Ice)
-		spike.Transparency = 0.2
+	for _ = 1, 12 do
+		local pos = randomGroundPoint(biome, rng, 25, 180)
+		if pos then
+			local height = rng:NextNumber(3, 9)
+			local spike = makeBall(parent, Vector3.new(1.7, height, 1.7), Color3.fromRGB(190, 230, 250),
+				CFrame.new(pos + Vector3.new(0, height / 2, 0)) * CFrame.Angles(rng:NextNumber(-0.1, 0.1), 0, rng:NextNumber(-0.1, 0.1)), Enum.Material.Ice)
+			spike.Transparency = 0.2
+		end
 	end
-	collectRingPoints(biome.Name, c, rng, 11, 20, 80)
+	-- GIANT ice wall slabs up in the mountain ring (the "wow" up high)
+	for i = 1, 10 do
+		local angle = math.pi * 0.6 + (i / 10) * math.pi * 0.9 -- the western arc
+		local radius = rng:NextNumber(170, 215)
+		local x = biome.Center.X + math.cos(angle) * radius
+		local z = biome.Center.Z + math.sin(angle) * radius
+		local y = groundAt(x, z)
+		local slab = makePart(parent, {
+			Size = Vector3.new(rng:NextNumber(18, 30), rng:NextNumber(24, 40), rng:NextNumber(4, 7)),
+			Color = Color3.fromRGB(175, 220, 245),
+			Material = Enum.Material.Glacier,
+			Transparency = 0.15,
+			CFrame = CFrame.new(x, y + 10, z) * CFrame.Angles(rng:NextNumber(-0.08, 0.08), angle + math.rad(90), rng:NextNumber(-0.08, 0.08)),
+		})
+		slab.CastShadow = true -- these are big enough to earn shadows
+	end
+	-- Frozen pond near the heart
+	local pondX, pondZ = biome.Center.X + 40, biome.Center.Z + 55
+	workspace.Terrain:FillCylinder(CFrame.new(pondX, groundAt(pondX, pondZ) - 0.4, pondZ), 1.2, 14, Enum.Material.Glacier)
+	addEggPoint("Tundra", Vector3.new(pondX, groundAt(pondX, pondZ), pondZ))
+
+	collectGroundPoints(biome, rng, 12, 25, 170)
 end
 
 local function buildVolcanic(parent: Instance, biome, rng: Random)
-	local c = biome.Center
-	workspace.Terrain:FillCylinder(CFrame.new(c.X, -4, c.Z), 8, 90, Enum.Material.Basalt)
-	-- Lava pools (bright, glowing terrain)
-	for _ = 1, 4 do
-		local pos = c + Vector3.new(rng:NextNumber(-60, 60), 0, rng:NextNumber(-60, 60))
-		workspace.Terrain:FillCylinder(CFrame.new(pos.X, -0.6, pos.Z), 1.4, rng:NextNumber(6, 10), Enum.Material.CrackedLava)
+	-- Obsidian spikes + dark boulders on the lower slopes
+	for _ = 1, 14 do
+		local pos = randomGroundPoint(biome, rng, 60, biome.Radius - 40)
+		if pos then
+			local height = rng:NextNumber(4, 10)
+			makeBall(parent, Vector3.new(2.2, height, 2.2), Color3.fromRGB(45, 42, 48),
+				CFrame.new(pos + Vector3.new(0, height / 2, 0)) * CFrame.Angles(rng:NextNumber(-0.15, 0.15), 0, rng:NextNumber(-0.15, 0.15)), Enum.Material.Slate)
+		end
 	end
-	-- Obsidian spikes + dark boulders
-	for _ = 1, 10 do
-		local pos = c + Vector3.new(rng:NextNumber(-75, 75), 0, rng:NextNumber(-75, 75))
-		local height = rng:NextNumber(4, 9)
-		makeBall(parent, Vector3.new(2, height, 2), Color3.fromRGB(45, 42, 48), CFrame.new(pos + Vector3.new(0, height / 2, 0)) * CFrame.Angles(rng:NextNumber(-0.15, 0.15), 0, rng:NextNumber(-0.15, 0.15)), Enum.Material.Slate)
+	-- Ember vents
+	for _ = 1, 6 do
+		local pos = randomGroundPoint(biome, rng, 50, 160)
+		if pos then
+			local vent = makePart(parent, {
+				Size = Vector3.new(2.4, 0.6, 2.4),
+				Color = Color3.fromRGB(70, 60, 60),
+				Material = Enum.Material.Slate,
+				CFrame = CFrame.new(pos + Vector3.new(0, 0.3, 0)),
+			})
+			local fire = Instance.new("Fire")
+			fire.Size = 4
+			fire.Parent = vent
+		end
 	end
-	-- Ember vents: cracks with fire + drifting sparks
-	for _ = 1, 5 do
-		local pos = c + Vector3.new(rng:NextNumber(-65, 65), 0, rng:NextNumber(-65, 65))
-		local vent = makePart(parent, {
-			Size = Vector3.new(2.4, 0.6, 2.4),
-			Color = Color3.fromRGB(70, 60, 60),
-			Material = Enum.Material.Slate,
-			CFrame = CFrame.new(pos + Vector3.new(0, 0.3, 0)),
+	-- Crater rim: a smoke column billowing from the volcano's throat
+	local rimY = groundAt(biome.Center.X, biome.Center.Z - 12)
+	local smokeAnchor = makePart(parent, {
+		Size = Vector3.new(2, 2, 2),
+		Transparency = 1,
+		CanCollide = false,
+		CFrame = CFrame.new(biome.Center.X, rimY + 6, biome.Center.Z),
+	})
+	local smoke = Instance.new("ParticleEmitter")
+	smoke.Color = ColorSequence.new(Color3.fromRGB(90, 85, 82), Color3.fromRGB(150, 145, 140))
+	smoke.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1) })
+	smoke.Rate = 6
+	smoke.Lifetime = NumberRange.new(4, 7)
+	smoke.Speed = NumberRange.new(6, 10)
+	smoke.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 4), NumberSequenceKeypoint.new(1, 14) })
+	smoke.Parent = smokeAnchor
+
+	-- Two lava falls: glowing streams down the flank
+	for _, angle in { math.rad(140), math.rad(300) } do
+		local dir = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		local top = biome.Center + dir * 30
+		local bottom = biome.Center + dir * 125
+		local topY = groundAt(top.X, top.Z) - 1
+		local bottomY = groundAt(bottom.X, bottom.Z) - 0.5
+		local mid = (Vector3.new(top.X, topY, top.Z) + Vector3.new(bottom.X, bottomY, bottom.Z)) / 2
+		local length = (Vector3.new(top.X, topY, top.Z) - Vector3.new(bottom.X, bottomY, bottom.Z)).Magnitude
+		local stream = makePart(parent, {
+			Size = Vector3.new(4, 0.8, length),
+			Color = Color3.fromRGB(255, 120, 40),
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			CFrame = CFrame.lookAt(mid, Vector3.new(bottom.X, bottomY, bottom.Z)),
 		})
-		local fire = Instance.new("Fire")
-		fire.Size = 4
-		fire.Parent = vent
-		local sparks = Instance.new("ParticleEmitter")
-		sparks.Color = ColorSequence.new(Color3.fromRGB(255, 150, 60))
-		sparks.LightEmission = 1
-		sparks.Rate = 4
-		sparks.Lifetime = NumberRange.new(1, 2)
-		sparks.Speed = NumberRange.new(3, 6)
-		sparks.Size = NumberSequence.new(0.15)
-		sparks.Parent = vent
+		local glow = Instance.new("PointLight")
+		glow.Color = Color3.fromRGB(255, 130, 50)
+		glow.Brightness = 1.4
+		glow.Range = 18
+		glow.Parent = stream
+		-- A lava pool where the fall lands
+		workspace.Terrain:FillCylinder(CFrame.new(bottom.X, bottomY - 0.6, bottom.Z), 1.4, 8, Enum.Material.CrackedLava)
 	end
-	collectRingPoints(biome.Name, c, rng, 10, 18, 70)
+
+	-- One brave egg point at the crater rim (the risky prize spot)
+	addEggPoint("Volcanic", Vector3.new(biome.Center.X, groundAt(biome.Center.X, biome.Center.Z - 28), biome.Center.Z - 28))
+	collectGroundPoints(biome, rng, 11, 50, 170)
 end
 
 local function buildSky(parent: Instance, biome, rng: Random)
-	local c = biome.Center -- floats at Y = 150
-	-- Three floating grass discs joined by plank bridges
+	local c = biome.Center
 	local discs = {
-		{ Offset = Vector3.zero, Radius = 45 },
-		{ Offset = Vector3.new(70, 8, 25), Radius = 26 },
-		{ Offset = Vector3.new(-60, -6, -30), Radius = 22 },
+		{ Offset = Vector3.zero, Radius = 55 },
+		{ Offset = Vector3.new(80, 8, 30), Radius = 26 },
+		{ Offset = Vector3.new(-70, -6, -35), Radius = 22 },
 	}
 	for _, disc in discs do
 		local center = c + disc.Offset
 		workspace.Terrain:FillCylinder(CFrame.new(center.X, center.Y - 3, center.Z), 6, disc.Radius, Enum.Material.Grass)
-		-- Rocky underside so islands don't look like pancakes
 		workspace.Terrain:FillBall(center - Vector3.new(0, 8, 0), disc.Radius * 0.55, Enum.Material.Rock)
-		-- Cloud puffs drifting around the rim
 		for _ = 1, 4 do
 			local angle = rng:NextNumber(0, math.pi * 2)
 			local puff = makeBall(parent, Vector3.new(8, 3.5, 8), Color3.fromRGB(250, 250, 255),
@@ -329,10 +508,9 @@ local function buildSky(parent: Instance, biome, rng: Random)
 			puff.Transparency = 0.35
 		end
 	end
-	-- Bridges between main disc and satellites
 	for _, target in { discs[2], discs[3] } do
-		local fromPos = c + (target.Offset.Unit * 40) + Vector3.new(0, 0.4, 0)
-		local toPos = c + target.Offset - (target.Offset.Unit * (target.Radius - 3)) + Vector3.new(0, target.Offset.Y > 0 and 0.4 or 0.4, 0)
+		local fromPos = c + (target.Offset.Unit * 50) + Vector3.new(0, 0.4, 0)
+		local toPos = c + target.Offset - (target.Offset.Unit * (target.Radius - 3)) + Vector3.new(0, 0.4, 0)
 		local span = toPos - fromPos
 		local segments = math.max(4, math.floor(span.Magnitude / 2.4))
 		for i = 0, segments do
@@ -345,9 +523,8 @@ local function buildSky(parent: Instance, biome, rng: Random)
 			})
 		end
 	end
-	-- Floating crystals for sparkle
 	for _ = 1, 6 do
-		local pos = c + Vector3.new(rng:NextNumber(-40, 40), rng:NextNumber(4, 12), rng:NextNumber(-40, 40))
+		local pos = c + Vector3.new(rng:NextNumber(-45, 45), rng:NextNumber(4, 12), rng:NextNumber(-45, 45))
 		local crystal = makePart(parent, {
 			Size = Vector3.new(1, 1.6, 1),
 			Color = Color3.fromRGB(190, 215, 255),
@@ -357,10 +534,13 @@ local function buildSky(parent: Instance, biome, rng: Random)
 		})
 		crystal.Transparency = 0.25
 	end
-	collectRingPoints(biome.Name, c, rng, 8, 8, 38)
-	-- A couple of points on the satellite discs
-	table.insert(eggPoints[biome.Name], c + discs[2].Offset)
-	table.insert(eggPoints[biome.Name], c + discs[3].Offset)
+	for _ = 1, 8 do
+		local angle = rng:NextNumber(0, math.pi * 2)
+		local radius = rng:NextNumber(8, 45)
+		addEggPoint("Sky", c + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius))
+	end
+	addEggPoint("Sky", c + discs[2].Offset)
+	addEggPoint("Sky", c + discs[3].Offset)
 end
 
 -- ------------------------------------------------------------
@@ -390,7 +570,7 @@ function BiomeGenerator.getGuidePrompt(biomeName: string): ProximityPrompt?
 	return guidePrompts[biomeName]
 end
 
--- Which biome does a world position belong to? (nearest island center)
+-- Which biome does a world position belong to? (nearest center)
 function BiomeGenerator.getBiomeAt(position: Vector3): string
 	local bestName, bestDistance = "Forest", math.huge
 	for _, biome in GameConfig.Biomes do
@@ -402,18 +582,12 @@ function BiomeGenerator.getBiomeAt(position: Vector3): string
 	return bestName
 end
 
--- Called BEFORE any island generates: the ocean floor everything sits in.
--- (Island fills overwrite water; filling water later would flood them.)
-function BiomeGenerator.buildOcean()
-	workspace.Terrain:FillBlock(CFrame.new(0, -6, 0), Vector3.new(1700, 8, 1700), Enum.Material.Water)
-end
-
 function BiomeGenerator.build()
-	local rng = Random.new(GameConfig.Forest.Seed + 4) -- patch-4 furniture seed
-	local islands = Instance.new("Model")
-	islands.Name = "Biomes"
+	local rng = Random.new(GameConfig.Forest.Seed + 4)
+	local regions = Instance.new("Model")
+	regions.Name = "Biomes"
 
-	local builders = {
+	local decorators = {
 		Desert = buildDesert,
 		Tundra = buildTundra,
 		Volcanic = buildVolcanic,
@@ -421,34 +595,26 @@ function BiomeGenerator.build()
 	}
 
 	for _, biome in GameConfig.Biomes do
-		local buildIsland = builders[biome.Name]
-		if buildIsland then
-			buildIsland(islands, biome, rng)
+		local decorate = decorators[biome.Name]
+		if decorate then
+			decorate(regions, biome, rng)
 		end
-		-- Arrival point: island edge closest to the Forest (or village spawn)
+
+		buildSanctuaryPads(regions, biome)
+		buildGateWall(regions, biome)
+
+		local arrival = TerrainForge.getArrival(biome.Name)
+		travelTargets[biome.Name] = CFrame.new(arrival + Vector3.new(0, 3, 0))
 		if biome.Name == "Forest" then
-			travelTargets.Forest = CFrame.new(Vector3.new(0, 3, 12))
-			buildTravelHub(islands, "Forest", Vector3.new(16, 0, 20)) -- beside the village spawn
-			buildGuideNPC(islands, "Forest", Vector3.new(-10, 0, 16)) -- near the well
-			buildSanctuaryPads(islands, "Forest", padRing(Vector3.zero, 92))
-		elseif biome.Name == "Sky" then
-			-- The Sky main disc only fits ONE pad (its satellites are small)
-			local edge = biome.Center + Vector3.new(0, 0, 30)
-			travelTargets.Sky = CFrame.new(edge + Vector3.new(0, 3, 0))
-			buildTravelHub(islands, "Sky", edge + Vector3.new(8, 0, 0))
-			buildGuideNPC(islands, "Sky", edge + Vector3.new(-8, 0, -2))
-			buildSanctuaryPads(islands, "Sky", { biome.Center + Vector3.new(0, 0, -18) })
+			buildTravelHub(regions, "Forest", Vector3.new(16, 0, 20))
+			buildGuideNPC(regions, "Forest", Vector3.new(-10, 0, 16))
 		else
-			local toOrigin = (Vector3.new(0, 0, 0) - biome.Center) * Vector3.new(1, 0, 1)
-			local edge = biome.Center + toOrigin.Unit * 20
-			travelTargets[biome.Name] = CFrame.new(edge + Vector3.new(0, 3, 0))
-			buildTravelHub(islands, biome.Name, edge + Vector3.new(6, 0, 6))
-			buildGuideNPC(islands, biome.Name, edge + Vector3.new(-8, 0, 4))
-			buildSanctuaryPads(islands, biome.Name, padRing(biome.Center, 58))
+			buildTravelHub(regions, biome.Name, arrival + Vector3.new(8, 0, 6))
+			buildGuideNPC(regions, biome.Name, arrival + Vector3.new(-8, 0, 4))
 		end
 	end
 
-	islands.Parent = workspace
+	regions.Parent = workspace
 end
 
 return BiomeGenerator
