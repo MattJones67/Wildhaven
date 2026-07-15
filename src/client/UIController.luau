@@ -1030,11 +1030,13 @@ function UIController.setPotions(potions: { [string]: number })
 	UIController.refreshPotionRows()
 end
 
-function UIController.setEggInventory(inventory: { string }, capacity: number)
+function UIController.setEggInventory(inventory: { any }, capacity: number)
 	eggCounts = {}
 	eggTotal = #inventory
 	eggCapacity = capacity
-	for _, eggName in inventory do
+	for _, egg in inventory do
+		-- patch 6: entries are {Type, Quality} tables (old saves migrated)
+		local eggName = typeof(egg) == "table" and egg.Type or egg
 		eggCounts[eggName] = (eggCounts[eggName] or 0) + 1
 	end
 	refreshEggRows()

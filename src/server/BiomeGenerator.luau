@@ -124,6 +124,8 @@ local function buildGuideNPC(parent: Instance, biomeName: string, position: Vect
 	local biome = GameConfig.BiomeByName[biomeName]
 	local npc = Instance.new("Model")
 	npc.Name = "Guide_" .. biomeName
+	-- STREAMING: NPCs arrive whole or not at all (never a floating head)
+	npc.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 
 	local body = makeBall(npc, Vector3.new(1.6, 2.2, 1.3), biome.Color, CFrame.new(position + Vector3.new(0, 1.3, 0)))
 	body.Name = "Body"
@@ -171,6 +173,7 @@ end
 local function buildTravelHub(parent: Instance, hereBiome: string, position: Vector3)
 	local hub = Instance.new("Model")
 	hub.Name = "TravelHub_" .. hereBiome
+	hub.ModelStreamingMode = Enum.ModelStreamingMode.Atomic -- streams as a unit
 	standingCylinder(hub, 0.6, 9, Color3.fromRGB(200, 195, 185), position + Vector3.new(0, 0.3, 0), Enum.Material.Slate)
 	local destinations = {}
 	for _, biome in GameConfig.Biomes do
@@ -205,46 +208,72 @@ local function buildTravelHub(parent: Instance, hereBiome: string, position: Vec
 	hub.Parent = parent
 end
 
--- Translucent gate-wall ring around a locked biome. Server-side these
--- never collide (unlocked players walk straight through); the CLIENT
--- turns collision on locally while the biome is locked for them, and
--- BiomeService teleports out anyone who cheats past. ForceField material
--- gives the shimmer "energy barrier" look for free.
-local function buildGateWall(parent: Instance, biome)
-	local radius = biome.WallRadius
-	if not radius then
+-- WORLD EXPANSION: locked regions are now walled by NATURAL mountain
+-- ridges (TerrainForge raises them), broken only by one mountain PASS
+-- facing the Forest. The pass holds the actual gate: carved stone pillars
+-- and translucent magic panes. Server-side the panes never collide
+-- (unlocked players walk straight through); the CLIENT turns collision on
+-- locally while the region is locked (BiomeWallController — same
+-- "BiomeWall" tag as before), and BiomeService teleports out cheaters.
+local function buildPassGate(parent: Instance, biome)
+	local passPos = TerrainForge.getPassPosition(biome.Name)
+	if not passPos then
 		return
 	end
-	local segments = 36
-	local arc = (2 * math.pi * radius) / segments
 	local wallFolder = Instance.new("Folder")
-	wallFolder.Name = "GateWall_" .. biome.Name
+	wallFolder.Name = "PassGate_" .. biome.Name
 
-	for i = 1, segments do
-		local angle = (i / segments) * math.pi * 2
-		local x = biome.Center.X + math.cos(angle) * radius
-		local z = biome.Center.Z + math.sin(angle) * radius
-		local wall = makePart(wallFolder, {
+	-- The gate faces the Forest: panes run PERPENDICULAR to that axis
+	local toOrigin = (Vector3.zero - biome.Center) * Vector3.new(1, 0, 1)
+	local facing = CFrame.lookAt(Vector3.new(passPos.X, 0, passPos.Z), Vector3.new(passPos.X, 0, passPos.Z) + toOrigin.Unit)
+	local groundY = groundAt(passPos.X, passPos.Z)
+
+	-- Carved stone pillars flanking the corridor + a lintel
+	for _, side in { -1, 1 } do
+		local pillarCF = facing * CFrame.new(side * 34, 0, 0)
+		makePart(wallFolder, {
+			Size = Vector3.new(8, 46, 8),
+			Color = Color3.fromRGB(150, 148, 142),
+			Material = Enum.Material.Slate,
+			CFrame = CFrame.new(pillarCF.Position.X, groundY + 23, pillarCF.Position.Z) * (pillarCF - pillarCF.Position),
+		})
+		local crystal = makePart(wallFolder, {
+			Size = Vector3.new(2.4, 3.4, 2.4),
+			Color = biome.Color,
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			CFrame = CFrame.new(pillarCF.Position.X, groundY + 49, pillarCF.Position.Z) * CFrame.Angles(0, math.rad(45), math.rad(45)),
+		})
+		local light = Instance.new("PointLight")
+		light.Color = biome.Color
+		light.Brightness = 1.6
+		light.Range = 22
+		light.Parent = crystal
+	end
+
+	-- The magic panes across the corridor (three, covering ~70 studs)
+	for i = -1, 1 do
+		local paneCF = facing * CFrame.new(i * 23, 0, 0)
+		local pane = makePart(wallFolder, {
 			Name = "GateWall",
-			Size = Vector3.new(arc + 2, 110, 2),
+			Size = Vector3.new(24, 60, 2),
 			Color = biome.Color,
 			Material = Enum.Material.ForceField,
 			Transparency = 0.85,
 			CanCollide = false, -- collision is applied LOCALLY per player
-			CFrame = CFrame.new(Vector3.new(x, 40, z), Vector3.new(biome.Center.X, 40, biome.Center.Z)),
+			CFrame = CFrame.new(paneCF.Position.X, groundY + 28, paneCF.Position.Z) * (paneCF - paneCF.Position),
 		})
-		CollectionService:AddTag(wall, "BiomeWall")
-		wall:SetAttribute("Biome", biome.Name)
+		CollectionService:AddTag(pane, "BiomeWall")
+		pane:SetAttribute("Biome", biome.Name)
 	end
 
-	-- Lock sign on the Forest-facing side so travelers know the deal
-	local toOrigin = (Vector3.zero - biome.Center) * Vector3.new(1, 0, 1)
-	local signPos = biome.Center + toOrigin.Unit * radius
+	-- Lock sign floating over the pass
+	local signPos = Vector3.new(passPos.X, 0, passPos.Z)
 	local anchor = makePart(wallFolder, {
 		Size = Vector3.new(1, 1, 1),
 		Transparency = 1,
 		CanCollide = false,
-		CFrame = CFrame.new(signPos.X, groundAt(signPos.X, signPos.Z) + 9, signPos.Z),
+		CFrame = CFrame.new(signPos.X, groundAt(signPos.X, signPos.Z) + 12, signPos.Z),
 	})
 	local billboard = Instance.new("BillboardGui")
 	billboard.Size = UDim2.new(0, 260, 0, 60)
@@ -320,9 +349,9 @@ local function buildPyramid(parent: Instance, baseCenter: Vector3, tiers: number
 end
 
 local function buildDesert(parent: Instance, biome, rng: Random)
-	-- Cactus stands
-	for _ = 1, 22 do
-		local pos = randomGroundPoint(biome, rng, 30, biome.Radius - 40)
+	-- Cactus stands (counts scaled for the 3x region)
+	for _ = 1, 44 do
+		local pos = randomGroundPoint(biome, rng, 30, biome.Radius - 60)
 		if pos then
 			local height = rng:NextNumber(3, 6)
 			local green = Color3.fromRGB(90, 155, 80)
@@ -335,7 +364,7 @@ local function buildDesert(parent: Instance, biome, rng: Random)
 		end
 	end
 	-- Weathered ruin circle
-	local ruinsX, ruinsZ = biome.Center.X + 60, biome.Center.Z - 70
+	local ruinsX, ruinsZ = biome.Center.X + 100, biome.Center.Z - 120
 	local ruinsY = groundAt(ruinsX, ruinsZ)
 	for i = 1, 6 do
 		local angle = (i / 6) * math.pi * 2
@@ -352,27 +381,27 @@ local function buildDesert(parent: Instance, biome, rng: Random)
 	addEggPoint("Desert", Vector3.new(ruinsX, ruinsY, ruinsZ))
 
 	-- THE pyramids (positions are constants — nudge freely)
-	local p1x, p1z = biome.Center.X + 110, biome.Center.Z + 80
-	local p2x, p2z = biome.Center.X - 40, biome.Center.Z - 120
+	local p1x, p1z = biome.Center.X + 190, biome.Center.Z + 140
+	local p2x, p2z = biome.Center.X - 70, biome.Center.Z - 210
 	buildPyramid(parent, Vector3.new(p1x, groundAt(p1x, p1z) - 0.5, p1z), 9, 46)
 	buildPyramid(parent, Vector3.new(p2x, groundAt(p2x, p2z) - 0.5, p2z), 6, 30)
 
 	-- Sun-bleached rocks
-	for _ = 1, 10 do
-		local pos = randomGroundPoint(biome, rng, 30, biome.Radius - 40)
+	for _ = 1, 22 do
+		local pos = randomGroundPoint(biome, rng, 30, biome.Radius - 60)
 		if pos then
 			local size = rng:NextNumber(1.5, 4)
 			makeBall(parent, Vector3.new(size, size * 0.6, size), Color3.fromRGB(205, 185, 150),
 				CFrame.new(pos + Vector3.new(0, size * 0.2, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi), 0), Enum.Material.Sandstone)
 		end
 	end
-	collectGroundPoints(biome, rng, 12, 25, biome.Radius - 50)
+	collectGroundPoints(biome, rng, 20, 25, biome.Radius - 70)
 end
 
 local function buildTundra(parent: Instance, biome, rng: Random)
-	-- Snowy pines across the snowfields
-	for _ = 1, 18 do
-		local pos = randomGroundPoint(biome, rng, 25, 150)
+	-- Snowy pines across the snowfields (scaled for the 3x region)
+	for _ = 1, 36 do
+		local pos = randomGroundPoint(biome, rng, 25, biome.Radius * 0.58)
 		if pos then
 			local height = rng:NextNumber(4, 8)
 			standingCylinder(parent, height, 1, Color3.fromRGB(105, 78, 58), pos + Vector3.new(0, height / 2, 0), Enum.Material.Wood)
@@ -385,8 +414,8 @@ local function buildTundra(parent: Instance, biome, rng: Random)
 		end
 	end
 	-- Ice spikes
-	for _ = 1, 12 do
-		local pos = randomGroundPoint(biome, rng, 25, 180)
+	for _ = 1, 24 do
+		local pos = randomGroundPoint(biome, rng, 25, biome.Radius * 0.68)
 		if pos then
 			local height = rng:NextNumber(3, 9)
 			local spike = makeBall(parent, Vector3.new(1.7, height, 1.7), Color3.fromRGB(190, 230, 250),
@@ -395,9 +424,9 @@ local function buildTundra(parent: Instance, biome, rng: Random)
 		end
 	end
 	-- GIANT ice wall slabs up in the mountain ring (the "wow" up high)
-	for i = 1, 10 do
-		local angle = math.pi * 0.6 + (i / 10) * math.pi * 0.9 -- the western arc
-		local radius = rng:NextNumber(170, 215)
+	for i = 1, 14 do
+		local angle = math.pi * 0.6 + (i / 14) * math.pi * 0.9 -- the western arc
+		local radius = rng:NextNumber(biome.Radius * 0.62, biome.Radius * 0.8)
 		local x = biome.Center.X + math.cos(angle) * radius
 		local z = biome.Center.Z + math.sin(angle) * radius
 		local y = groundAt(x, z)
@@ -411,17 +440,17 @@ local function buildTundra(parent: Instance, biome, rng: Random)
 		slab.CastShadow = true -- these are big enough to earn shadows
 	end
 	-- Frozen pond near the heart
-	local pondX, pondZ = biome.Center.X + 40, biome.Center.Z + 55
+	local pondX, pondZ = biome.Center.X + 70, biome.Center.Z + 95
 	workspace.Terrain:FillCylinder(CFrame.new(pondX, groundAt(pondX, pondZ) - 0.4, pondZ), 1.2, 14, Enum.Material.Glacier)
 	addEggPoint("Tundra", Vector3.new(pondX, groundAt(pondX, pondZ), pondZ))
 
-	collectGroundPoints(biome, rng, 12, 25, 170)
+	collectGroundPoints(biome, rng, 18, 25, biome.Radius * 0.6)
 end
 
 local function buildVolcanic(parent: Instance, biome, rng: Random)
-	-- Obsidian spikes + dark boulders on the lower slopes
-	for _ = 1, 14 do
-		local pos = randomGroundPoint(biome, rng, 60, biome.Radius - 40)
+	-- Obsidian spikes + dark boulders on the lower slopes (3x-scaled)
+	for _ = 1, 28 do
+		local pos = randomGroundPoint(biome, rng, 60, biome.Radius - 60)
 		if pos then
 			local height = rng:NextNumber(4, 10)
 			makeBall(parent, Vector3.new(2.2, height, 2.2), Color3.fromRGB(45, 42, 48),
@@ -429,8 +458,8 @@ local function buildVolcanic(parent: Instance, biome, rng: Random)
 		end
 	end
 	-- Ember vents
-	for _ = 1, 6 do
-		local pos = randomGroundPoint(biome, rng, 50, 160)
+	for _ = 1, 12 do
+		local pos = randomGroundPoint(biome, rng, 60, biome.Radius * 0.62)
 		if pos then
 			local vent = makePart(parent, {
 				Size = Vector3.new(2.4, 0.6, 2.4),
@@ -460,11 +489,12 @@ local function buildVolcanic(parent: Instance, biome, rng: Random)
 	smoke.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 4), NumberSequenceKeypoint.new(1, 14) })
 	smoke.Parent = smokeAnchor
 
-	-- Two lava falls: glowing streams down the flank
+	-- Two lava falls: glowing streams down the flank (cone-scaled)
+	local coneRadius = biome.Radius * 0.55
 	for _, angle in { math.rad(140), math.rad(300) } do
 		local dir = Vector3.new(math.cos(angle), 0, math.sin(angle))
-		local top = biome.Center + dir * 30
-		local bottom = biome.Center + dir * 125
+		local top = biome.Center + dir * (coneRadius * 0.24)
+		local bottom = biome.Center + dir * (coneRadius * 0.96)
 		local topY = groundAt(top.X, top.Z) - 1
 		local bottomY = groundAt(bottom.X, bottom.Z) - 0.5
 		local mid = (Vector3.new(top.X, topY, top.Z) + Vector3.new(bottom.X, bottomY, bottom.Z)) / 2
@@ -486,8 +516,9 @@ local function buildVolcanic(parent: Instance, biome, rng: Random)
 	end
 
 	-- One brave egg point at the crater rim (the risky prize spot)
-	addEggPoint("Volcanic", Vector3.new(biome.Center.X, groundAt(biome.Center.X, biome.Center.Z - 28), biome.Center.Z - 28))
-	collectGroundPoints(biome, rng, 11, 50, 170)
+	local rimZ = biome.Center.Z - coneRadius * 0.2
+	addEggPoint("Volcanic", Vector3.new(biome.Center.X, groundAt(biome.Center.X, rimZ), rimZ))
+	collectGroundPoints(biome, rng, 16, 60, biome.Radius * 0.62)
 end
 
 local function buildSky(parent: Instance, biome, rng: Random)
@@ -541,6 +572,66 @@ local function buildSky(parent: Instance, biome, rng: Random)
 	end
 	addEggPoint("Sky", c + discs[2].Offset)
 	addEggPoint("Sky", c + discs[3].Offset)
+end
+
+-- ------------------------------------------------------------
+-- LOD silhouettes (Part 0): a PERSISTENT model of ~20 huge, dirt-cheap
+-- shapes that never stream out — so from the village you can always SEE
+-- the volcano, the ice peaks and the pyramids on the horizon, even
+-- though their real geometry only streams in when you approach.
+-- Silhouettes sit slightly smaller/lower than the real shapes so the
+-- streamed-in geometry covers them without z-fighting.
+-- ------------------------------------------------------------
+
+local function lodCone(parent: Instance, baseCenter: Vector3, radius: number, height: number, color: Color3)
+	-- A cone from 4 shrinking stacked cylinders (cheap but reads right)
+	for layer = 0, 3 do
+		local t = layer / 4
+		local diameter = radius * 2 * (1 - t * 0.85)
+		local layerHeight = height / 4
+		local part = standingCylinder(parent, layerHeight, diameter, color,
+			baseCenter + Vector3.new(0, layerHeight * (layer + 0.5), 0))
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CastShadow = false
+	end
+end
+
+local function buildLOD(parent: Instance)
+	local lod = Instance.new("Model")
+	lod.Name = "WorldLOD"
+	lod.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+
+	local volcanic = GameConfig.BiomeByName.Volcanic
+	local coneRadius = volcanic.Radius * 0.55 * 0.92
+	lodCone(lod, Vector3.new(volcanic.Center.X, 0, volcanic.Center.Z), coneRadius, 118, Color3.fromRGB(58, 52, 55))
+	local lavaGlow = standingCylinder(lod, 2, coneRadius * 0.35, Color3.fromRGB(255, 120, 40),
+		Vector3.new(volcanic.Center.X, 100, volcanic.Center.Z), Enum.Material.Neon)
+	lavaGlow.CanCollide = false
+	lavaGlow.CastShadow = false
+
+	local tundra = GameConfig.BiomeByName.Tundra
+	for i = 1, 3 do
+		local angle = math.pi * 0.7 + i * 0.5
+		local peakPos = Vector3.new(
+			tundra.Center.X + math.cos(angle) * tundra.Radius * 0.7, 0,
+			tundra.Center.Z + math.sin(angle) * tundra.Radius * 0.7)
+		lodCone(lod, peakPos, 60, 88, Color3.fromRGB(205, 225, 238))
+	end
+
+	local desert = GameConfig.BiomeByName.Desert
+	lodCone(lod, Vector3.new(desert.Center.X + 190, 2, desert.Center.Z + 140), 21, 28, Color3.fromRGB(214, 186, 136))
+	lodCone(lod, Vector3.new(desert.Center.X - 70, 2, desert.Center.Z - 210), 14, 19, Color3.fromRGB(214, 186, 136))
+
+	-- Treehouse marker at the village + the Sky cluster's underside puff
+	local trunk = standingCylinder(lod, 30, 8, Color3.fromRGB(105, 75, 52), Vector3.new(0, 15, -140), Enum.Material.Wood)
+	trunk.CanCollide = false
+	trunk.CastShadow = false
+	makeBall(lod, Vector3.new(34, 22, 34), Color3.fromRGB(80, 140, 78), CFrame.new(0, 36, -140))
+	local sky = GameConfig.BiomeByName.Sky
+	makeBall(lod, Vector3.new(140, 34, 140), Color3.fromRGB(245, 246, 252), CFrame.new(sky.Center - Vector3.new(0, 12, 0))).Transparency = 0.25
+
+	lod.Parent = parent
 end
 
 -- ------------------------------------------------------------
@@ -601,7 +692,7 @@ function BiomeGenerator.build()
 		end
 
 		buildSanctuaryPads(regions, biome)
-		buildGateWall(regions, biome)
+		buildPassGate(regions, biome)
 
 		local arrival = TerrainForge.getArrival(biome.Name)
 		travelTargets[biome.Name] = CFrame.new(arrival + Vector3.new(0, 3, 0))
@@ -614,6 +705,7 @@ function BiomeGenerator.build()
 		end
 	end
 
+	buildLOD(regions)
 	regions.Parent = workspace
 end
 

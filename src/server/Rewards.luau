@@ -77,8 +77,9 @@ function Rewards.grant(player: Player, reward)
 	end
 	if reward.Egg then
 		-- Straight into the satchel. Rewards may overflow capacity — the cap
-		-- only gates world PICKUPS, never gifts.
-		table.insert(data.EggInventory, reward.Egg)
+		-- only gates world PICKUPS, never gifts. Gift eggs never played the
+		-- skill-check, so they carry baseline quality (patch 6).
+		table.insert(data.EggInventory, { Type = reward.Egg, Quality = GameConfig.SkillCheck.GiftQuality })
 		Remotes.EggInventoryUpdate:FireClient(player, {
 			Inventory = data.EggInventory,
 			Capacity = PlayerStats.getEggCapacity(player),

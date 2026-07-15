@@ -39,6 +39,8 @@ function IncomeService.pushState(player: Player)
 		Class = data.Class,
 		ClassTokens = data.ClassTokens or 0,
 		NextFreeRollIn = math.max(0, (data.LastClassRollAt or 0) + GameConfig.Classes.FreeRollCooldownSeconds - os.time()),
+		-- world expansion: which regions this player may enter (gates/walls)
+		UnlockedRegions = data.UnlockedRegions,
 	})
 end
 

@@ -18,9 +18,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 require(ReplicatedStorage.Remotes)
 
 local DataService = require(script.DataService)
-local TerrainForge = require(script.TerrainForge)
-local ForestGenerator = require(script.ForestGenerator)
-local BiomeGenerator = require(script.BiomeGenerator)
+local WorldGenerator = require(script.WorldGenerator)
 local BiomeService = require(script.BiomeService)
 local BaseUpgradeService = require(script.BaseUpgradeService)
 local GoalService = require(script.GoalService)
@@ -39,9 +37,7 @@ local RebirthService = require(script.RebirthService)
 local ReturnsService = require(script.ReturnsService)
 
 DataService.init()
-TerrainForge.build() -- the whole connected continent's ground
-ForestGenerator.build() -- carves river/pond/paths + plants the forest
-BiomeGenerator.build() -- biome decor, landmarks, walls, hubs, guides
+WorldGenerator.build() -- terrain -> forest hub -> regions -> LOD (streamed world)
 BiomeService.init()
 BaseUpgradeService.init()
 GoalService.init()

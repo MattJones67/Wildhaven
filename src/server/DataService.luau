@@ -116,6 +116,8 @@ local function defaultData(): PlayerData
 		ClassTokens = 0, -- free class rolls earned from quests
 		LastClassRollAt = 0, -- os.time() of last FREE roll (24h cooldown)
 		Quests = { Progress = {}, Completed = {}, DailyDoneAt = {} },
+		-- world expansion:
+		UnlockedRegions = { Forest = true }, -- regions this player may enter
 	}
 end
 
@@ -158,6 +160,13 @@ local function reconcile(data: { [string]: any }): PlayerData
 			data.NextPetId += 1
 		end
 		data.Discovered[entry.Species] = true
+	end
+	-- MIGRATION (patch 6): carried eggs used to be plain strings; now they
+	-- carry the skill-check Quality. Old eggs become baseline-quality tables.
+	for index, egg in data.EggInventory do
+		if typeof(egg) == "string" then
+			data.EggInventory[index] = { Type = egg, Quality = 0 }
+		end
 	end
 	return data :: PlayerData
 end

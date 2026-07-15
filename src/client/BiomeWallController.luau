@@ -22,8 +22,14 @@ local BiomeWallController = {}
 
 local rebirths = 0
 local totalEarned = 0
+local unlockedRegions: { [string]: boolean } = { Forest = true }
 
 local function isUnlockedLocally(biomeName: string): boolean
+	-- The server's persisted unlock map wins (covers future quest unlocks);
+	-- the stat check below is the fallback for the first seconds after join.
+	if unlockedRegions[biomeName] then
+		return true
+	end
 	local biome = GameConfig.BiomeByName[biomeName]
 	if not biome then
 		return true
@@ -86,6 +92,14 @@ function BiomeWallController.setState(state: { [string]: any })
 	if state.TotalEarned ~= nil and state.TotalEarned ~= totalEarned then
 		totalEarned = state.TotalEarned
 		changed = true
+	end
+	if state.UnlockedRegions ~= nil then
+		for name in state.UnlockedRegions do
+			if not unlockedRegions[name] then
+				unlockedRegions[name] = true
+				changed = true
+			end
+		end
 	end
 	if changed then
 		refreshAll()

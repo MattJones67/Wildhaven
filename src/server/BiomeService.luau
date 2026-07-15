@@ -20,7 +20,10 @@ local BiomeService = {}
 
 local lastTravelAt: { [Player]: number } = {}
 
--- SECURITY: the single source of truth for "can this player enter here"
+-- SECURITY: the single source of truth for "can this player enter here".
+-- WORLD EXPANSION: unlocks are now PERSISTED in data.UnlockedRegions the
+-- first time a gate's requirement is met — so future quest-based unlocks
+-- (and one-time unlock celebrations) have a real save field to live in.
 function BiomeService.isUnlocked(player: Player, biomeName: string): (boolean, string?)
 	local biome = GameConfig.BiomeByName[biomeName]
 	if not biome then
@@ -30,6 +33,10 @@ function BiomeService.isUnlocked(player: Player, biomeName: string): (boolean, s
 	if not data then
 		return false, "Still loading..."
 	end
+	data.UnlockedRegions = data.UnlockedRegions or { Forest = true }
+	if data.UnlockedRegions[biomeName] then
+		return true
+	end
 	local gate = biome.Gate
 	if gate.Rebirths and (data.Rebirths or 0) < gate.Rebirths then
 		return false, biome.GateText
@@ -37,6 +44,12 @@ function BiomeService.isUnlocked(player: Player, biomeName: string): (boolean, s
 	if gate.TotalEarned and (data.TotalEarned or 0) < gate.TotalEarned then
 		return false, biome.GateText
 	end
+	-- Requirement met: record the unlock permanently + celebrate once
+	data.UnlockedRegions[biomeName] = true
+	Remotes.Notify:FireClient(player, {
+		Text = "🔓 " .. biome.Emoji .. " The " .. biomeName .. " is now open to you!",
+		Kind = "Event",
+	})
 	return true
 end
 
@@ -92,7 +105,9 @@ local function enforceGates()
 		-- Only counts as "inside" within the biome's gated area
 		local flatDistance = (Vector3.new(root.Position.X, 0, root.Position.Z)
 			- Vector3.new(biome.Center.X, 0, biome.Center.Z)).Magnitude
-		local insideRadius = biome.WallRadius or biome.Radius + 40
+		-- 12-stud grace so a locked player can stand AT the gate and read
+		-- the sign without being bounced (the pane physically stops them)
+		local insideRadius = (biome.GateRadius and biome.GateRadius - 12) or biome.Radius + 40
 		if flatDistance > insideRadius then
 			continue
 		end

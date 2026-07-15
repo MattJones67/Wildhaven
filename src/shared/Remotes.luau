@@ -59,6 +59,12 @@ local DEFINITIONS = {
 	QuestUpdate = "RemoteEvent", -- active quests / progress changed (HUD tracker)
 	PotionsUpdate = "RemoteEvent", -- patch 5: potion inventory changed
 	TraderDialog = "RemoteEvent", -- patch 5: trader shop opens (stock + timer)
+	-- patch 6 extras: egg skill-check + lucky block wheel
+	EggSkillStart = "RemoteEvent", -- server -> you: minigame params (speed/zones/hits)
+	EggSkillTap = "RemoteEvent", -- you -> server: a tap at server-clock time t
+	EggSkillCancel = "RemoteEvent", -- you -> server: gave up (frees the egg)
+	EggSkillResult = "RemoteEvent", -- server -> you: final cracks/quality (or cancel)
+	LuckyWheel = "RemoteEvent", -- server -> you: spin the wheel onto prize #n
 }
 
 local Remotes = {}

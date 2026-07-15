@@ -129,6 +129,9 @@ end
 function LandmarkBuilder.buildVillage(parent: Instance, center: Vector3, radius: number)
 	local village = Instance.new("Model")
 	village.Name = "Village"
+	-- STREAMING: the village streams as one unit (it's the hub; players
+	-- are almost always near it anyway)
+	village.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 
 	buildCampfire(village, center)
 
@@ -326,6 +329,7 @@ end
 function LandmarkBuilder.buildTreehouse(parent: Instance, position: Vector3)
 	local treehouse = Instance.new("Model")
 	treehouse.Name = "Treehouse"
+	treehouse.ModelStreamingMode = Enum.ModelStreamingMode.Atomic -- streams whole
 
 	-- Giant trunk with root flares + a huge layered canopy
 	standingCylinder(treehouse, 34, 11, Color3.fromRGB(110, 78, 54), position + Vector3.new(0, 17, 0), Enum.Material.Wood)

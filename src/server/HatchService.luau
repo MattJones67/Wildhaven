@@ -89,12 +89,15 @@ end
 
 -- Core deposit logic, AFTER caller-specific validation. Assumes data loaded.
 local function startHatchInternal(player: Player, data, eggType: string)
-	-- Owns one of these eggs?
-	local inventoryIndex
+	-- Owns one of these eggs? Patch 6: eggs carry a skill-check Quality —
+	-- consume the BEST one of the requested type (feels fair, predictable).
+	local inventoryIndex, bestQuality
 	for index, carried in data.EggInventory do
-		if carried == eggType then
+		local carriedType = typeof(carried) == "table" and carried.Type or carried
+		local carriedQuality = typeof(carried) == "table" and (carried.Quality or 0) or 0
+		if carriedType == eggType and (bestQuality == nil or carriedQuality > bestQuality) then
 			inventoryIndex = index
-			break
+			bestQuality = carriedQuality
 		end
 	end
 	if not inventoryIndex then
@@ -121,7 +124,8 @@ local function startHatchInternal(player: Player, data, eggType: string)
 	table.remove(data.EggInventory, inventoryIndex)
 	local egg = GameConfig.EggByName[eggType]
 	local duration = egg.HatchSeconds * PlayerStats.getHatchSpeedMultiplier(player)
-	local hatch = { Slot = freeSlot, EggType = eggType, EndsAt = os.time() + math.ceil(duration) }
+	-- Quality rides along on the hatch record (persists across rejoins)
+	local hatch = { Slot = freeSlot, EggType = eggType, EndsAt = os.time() + math.ceil(duration), Quality = bestQuality or 0 }
 	table.insert(data.Hatches, hatch)
 
 	placeSlotEgg(player, hatch)
@@ -175,10 +179,13 @@ local function completeHatch(player: Player, data, hatchIndex: number)
 
 	-- THE ROLL: pet from this egg's pool + mutation + size, with total luck.
 	-- Mutations additionally honor class perks (e.g. Demon +10% mutation odds).
+	-- Patch 6: the egg's skill-check Quality boosts mutation & size odds —
+	-- a flawless collection doubles them (MaxOddsBonus).
 	local luck = PlayerStats.getLuck(player)
+	local qualityBonus = 1 + (hatch.Quality or 0) * GameConfig.SkillCheck.MaxOddsBonus
 	local species = RollUtil.rollPetFromEgg(hatch.EggType, luck)
-	local mutation = RollUtil.rollMutation(luck * PlayerStats.getMutationLuck(player))
-	local size = RollUtil.rollSize(luck)
+	local mutation = RollUtil.rollMutation(luck * PlayerStats.getMutationLuck(player) * qualityBonus)
+	local size = RollUtil.rollSize(luck * qualityBonus)
 
 	local entry = { Species = species, Mutation = mutation, Size = size, Id = data.NextPetId }
 	data.NextPetId += 1
@@ -273,9 +280,11 @@ function HatchService.init()
 		while true do
 			task.wait(GameConfig.AutoHatch.IntervalSeconds)
 			for player, data in DataService.getAllLoaded() do
+				-- (patch 6: inventory entries are {Type, Quality} tables now)
 				if data.AutoHatch and PlayerStats.hasAutoHatch(player) and #data.EggInventory > 0 then
 					-- FIFO: oldest carried egg goes in first
-					startHatchInternal(player, data, data.EggInventory[1])
+					local first = data.EggInventory[1]
+					startHatchInternal(player, data, typeof(first) == "table" and first.Type or first)
 				end
 			end
 		end

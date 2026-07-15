@@ -582,10 +582,13 @@ GameConfig.WorldEggVisual = {
 -- scattered so a full server has room); Y is the plot's ground height —
 -- TerrainForge flattens the land under each one. Nudge freely.
 GameConfig.Biomes = {
+	-- WORLD EXPANSION: every land region ~3x its old area (radius ~x1.7),
+	-- still one connected island. GateRadius = the ring where the border
+	-- mountains + the pass gate sit (also the server's enforcement radius).
 	{
 		Name = "Forest",
 		Center = Vector3.new(0, 0, 0),
-		Radius = 260,
+		Radius = 450,
 		Color = Color3.fromRGB(95, 170, 90),
 		Emoji = "🌲",
 		Gate = {}, -- always open
@@ -593,18 +596,18 @@ GameConfig.Biomes = {
 		Perk = { HatchSpeed = 0.9 },
 		PerkText = "Plot perk: 10% faster hatches",
 		Eggs = { "Forest Egg", "Mossy Egg", "Ancient Egg", "Mythic Egg" },
-		MaxWorldEggs = 12,
+		MaxWorldEggs = 16,
 		PlotPositions = {
-			Vector3.new(175, 0, 55), Vector3.new(175, 0, -55),
-			Vector3.new(-175, 0, 55), Vector3.new(-175, 0, -55),
-			Vector3.new(55, 0, 175), Vector3.new(-55, 0, 175),
+			Vector3.new(300, 0, 95), Vector3.new(300, 0, -95),
+			Vector3.new(-300, 0, 95), Vector3.new(-300, 0, -95),
+			Vector3.new(95, 0, 300), Vector3.new(-95, 0, 300),
 		},
 	},
 	{
 		Name = "Desert",
-		Center = Vector3.new(480, 0, 0),
-		Radius = 260,
-		WallRadius = 250,
+		Center = Vector3.new(850, 0, 0),
+		Radius = 450,
+		GateRadius = 425,
 		Color = Color3.fromRGB(230, 195, 120),
 		Emoji = "🏜️",
 		Gate = { TotalEarned = 10000 },
@@ -612,18 +615,18 @@ GameConfig.Biomes = {
 		Perk = { Income = 1.2 },
 		PerkText = "Plot perk: +20% income",
 		Eggs = { "Sand Egg" },
-		MaxWorldEggs = 8,
+		MaxWorldEggs = 10,
 		PlotPositions = {
-			Vector3.new(640, 4, 0), Vector3.new(480, 4, 160),
-			Vector3.new(480, 4, -160), Vector3.new(590, 4, 115),
-			Vector3.new(590, 4, -115), Vector3.new(370, 4, 130),
+			Vector3.new(1130, 4, 0), Vector3.new(850, 4, 280),
+			Vector3.new(850, 4, -280), Vector3.new(1040, 4, 200),
+			Vector3.new(1040, 4, -200), Vector3.new(650, 4, 230),
 		},
 	},
 	{
 		Name = "Tundra",
-		Center = Vector3.new(-480, 0, 0),
-		Radius = 260,
-		WallRadius = 250,
+		Center = Vector3.new(-850, 0, 0),
+		Radius = 450,
+		GateRadius = 425,
 		Color = Color3.fromRGB(190, 225, 240),
 		Emoji = "❄️",
 		Gate = { Rebirths = 1 },
@@ -631,18 +634,18 @@ GameConfig.Biomes = {
 		Perk = { Luck = 1.2 },
 		PerkText = "Plot perk: +20% luck",
 		Eggs = { "Frost Egg" },
-		MaxWorldEggs = 8,
+		MaxWorldEggs = 10,
 		PlotPositions = {
-			Vector3.new(-640, 10, 0), Vector3.new(-480, 10, 160),
-			Vector3.new(-480, 10, -160), Vector3.new(-590, 10, 115),
-			Vector3.new(-590, 10, -115), Vector3.new(-370, 10, 130),
+			Vector3.new(-1130, 10, 0), Vector3.new(-850, 10, 280),
+			Vector3.new(-850, 10, -280), Vector3.new(-1040, 10, 200),
+			Vector3.new(-1040, 10, -200), Vector3.new(-650, 10, 230),
 		},
 	},
 	{
 		Name = "Volcanic",
-		Center = Vector3.new(0, 0, 480),
-		Radius = 240,
-		WallRadius = 235,
+		Center = Vector3.new(0, 0, 850),
+		Radius = 420,
+		GateRadius = 395,
 		Color = Color3.fromRGB(215, 95, 60),
 		Emoji = "🌋",
 		Gate = { Rebirths = 2 },
@@ -650,16 +653,16 @@ GameConfig.Biomes = {
 		Perk = { Income = 1.6 },
 		PerkText = "Plot perk: +60% income",
 		Eggs = { "Ember Egg" },
-		MaxWorldEggs = 8,
+		MaxWorldEggs = 10,
 		PlotPositions = {
-			Vector3.new(150, 6, 480), Vector3.new(-150, 6, 480),
-			Vector3.new(115, 6, 615), Vector3.new(-115, 6, 615),
+			Vector3.new(270, 6, 850), Vector3.new(-270, 6, 850),
+			Vector3.new(200, 6, 1090), Vector3.new(-200, 6, 1090),
 		},
 	},
 	{
 		Name = "Sky",
-		Center = Vector3.new(0, 150, -650), -- floating; NOT part of the continent
-		Radius = 60,
+		Center = Vector3.new(0, 180, -1050), -- floating; NOT part of the continent
+		Radius = 110,
 		Color = Color3.fromRGB(180, 205, 255),
 		Emoji = "☁️",
 		Gate = { Rebirths = 3 },
@@ -669,9 +672,9 @@ GameConfig.Biomes = {
 		Perk = { Luck = 1.15, Income = 1.15 },
 		PerkText = "Plot perk: +15% luck AND +15% income",
 		Eggs = { "Sky Egg" },
-		MaxWorldEggs = 6,
+		MaxWorldEggs = 8,
 		PlotPositions = {
-			Vector3.new(20, 150, -668), Vector3.new(-20, 150, -632),
+			Vector3.new(35, 180, -1080), Vector3.new(-35, 180, -1020),
 		},
 	},
 }
@@ -889,8 +892,85 @@ GameConfig.Trader = {
 	},
 }
 
+-- ============================================================
+-- WORLD EXPANSION: STREAMING (Part 0). The island is now far too big to
+-- load at once — Workspace.StreamingEnabled is ON (it's not scriptable at
+-- runtime, so the actual values live in default.project.json; these are
+-- the documented source of truth — keep them in sync):
+--   StreamingMinRadius   = 256  (nothing inside this ever pops)
+--   StreamingTargetRadius = 1024 (how far Roblox tries to keep loaded)
+-- Budget: stay under ~50k instances in any loaded area. Landmarks are
+-- ATOMIC models (stream as one unit); huge shapes get PERSISTENT LOD
+-- silhouettes so the world looks vast before it streams in.
+-- ============================================================
+GameConfig.Streaming = {
+	MinRadius = 256,
+	TargetRadius = 1024,
+}
+
+-- World geometry (Part 1): one connected island, every region ~3x the old
+-- area. TerrainForge derives everything from the Biomes list below.
+GameConfig.World = {
+	Extent = 1400, -- terrain voxels span [-Extent, Extent] on X and Z
+	RidgeHeight = 65, -- natural border-mountain walls between regions
+	RidgeBand = 0.1, -- ridge thickness as a fraction of the biome radius
+	PassHalfAngle = math.rad(9), -- the unlockable mountain-pass corridor width
+}
+
+-- ============================================================
+-- EGG SKILL-CHECK (patch 6) — collecting a world egg is now a timed
+-- minigame: a marker sweeps a bar; tap inside the success zone. Rarer
+-- eggs = faster marker, smaller zone, more required hits.
+--
+-- Misses CRACK the egg. Cracks never destroy it — they only shrink the
+-- mutation/size BONUS the egg carries to the hatchery:
+--   Quality = clamp(1 - cracks * CrackPenalty, 0, 1)
+--   at hatch: mutation & size odds are multiplied by (1 + Quality * MaxOddsBonus)
+-- So a flawless run DOUBLES those odds; a butchered egg is just baseline.
+-- TODO(hardcore): a "shatter = lost egg" mode could kick in past MaxCracks;
+-- deliberately OFF — cracks cap the quality at 0 instead.
+-- ============================================================
+GameConfig.SkillCheck = {
+	LeadInSeconds = 0.7, -- breath between UI opening and the marker starting
+	TapMinInterval = 0.15, -- SECURITY: taps faster than this are ignored
+	TimeoutSeconds = 30, -- abandoning the minigame frees the egg for others
+	MaxCracks = 8, -- session force-finishes here (quality is long dead anyway)
+	CrackPenalty = 0.25, -- each crack removes 25% of the bonus
+	MaxOddsBonus = 1.0, -- flawless = x2 mutation & size odds at hatch
+	ZoneTolerance = 0.015, -- forgiveness margin for latency/float edges
+	GiftQuality = 0, -- eggs from rewards/traders never played the game: baseline
+	-- Difficulty tiers (marker speed = sweeps/second; zone = fraction of bar)
+	Tiers = {
+		[1] = { Speed = 0.55, ZoneSize = 0.22, Hits = 3 },
+		[2] = { Speed = 0.7, ZoneSize = 0.17, Hits = 4 },
+		[3] = { Speed = 0.85, ZoneSize = 0.13, Hits = 5 },
+		[4] = { Speed = 1.0, ZoneSize = 0.1, Hits = 6 },
+	},
+	-- Which tier each egg type plays at (unlisted eggs default to 1)
+	EggTiers = {
+		["Forest Egg"] = 1,
+		["Mossy Egg"] = 2,
+		["Sand Egg"] = 2,
+		["Frost Egg"] = 2,
+		["Ember Egg"] = 2,
+		["Sky Egg"] = 2,
+		["Ancient Egg"] = 3,
+		["Mythic Egg"] = 4,
+	},
+}
+
+-- ============================================================
+-- LUCKY BLOCK WHEEL (patch 6) — opening a block spins a carousel that
+-- lands on the SERVER-rolled prize (the client only animates).
+-- ============================================================
+GameConfig.LuckyWheel = {
+	SpinSeconds = 4.2, -- deceleration time; suspense lives here
+	Cards = 30, -- carousel length (filler cards drawn from the same pool)
+	TargetCard = 26, -- which card the pointer lands on (the real prize)
+}
+
 -- TODO (future patch): visiting other players' sanctuaries (social hooks).
--- TODO (patch 6): trade tokens + the trading system.
+-- TODO (patch 6 main): trade tokens + the trading system.
 
 -- ============================================================
 -- FOREST GENERATION
@@ -900,7 +980,7 @@ GameConfig.Trader = {
 -- ============================================================
 GameConfig.Forest = {
 	Seed = 1337,
-	IslandRadius = 220, -- how far forest flora/scatter spreads from the village
+	IslandRadius = 400, -- how far forest flora/scatter spreads from the village
 
 	-- Landmarks (hand-curated positions; y is always ground = 0)
 	VillageCenter = Vector3.new(0, 0, 0),
@@ -934,21 +1014,21 @@ GameConfig.Forest = {
 	},
 	ClearingRadius = 16,
 
-	-- Tree copses (clustered, not evenly sprinkled) — denser since the
-	-- continent rework made the forest much bigger
-	TreeClusterCount = 16,
-	TreesPerClusterMin = 5,
-	TreesPerClusterMax = 12,
-	TreeClusterRadius = 18,
+	-- Tree copses (clustered, not evenly sprinkled) — density scaled for
+	-- the 3x world expansion (watch the streaming instance budget!)
+	TreeClusterCount = 34,
+	TreesPerClusterMin = 6,
+	TreesPerClusterMax = 13,
+	TreeClusterRadius = 20,
 
 	-- Scattered small detail
-	RockCount = 34,
-	BushCount = 46,
-	FernCount = 52,
-	MushroomCount = 34,
-	FallenLogCount = 10,
-	TallGrassCount = 90,
-	FireflyPatchCount = 9,
+	RockCount = 70,
+	BushCount = 90,
+	FernCount = 100,
+	MushroomCount = 64,
+	FallenLogCount = 22,
+	TallGrassCount = 170,
+	FireflyPatchCount = 16,
 }
 
 -- ============================================================

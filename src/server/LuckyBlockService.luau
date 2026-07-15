@@ -75,6 +75,7 @@ local function buildBlock(golden: boolean): Model
 	return model
 end
 
+-- Returns the rolled entry AND its index (the wheel needs the index)
 local function rollReward(golden: boolean)
 	local pool = golden and BLOCKS.GoldenRewards or BLOCKS.Rewards
 	local totalWeight = 0
@@ -83,13 +84,13 @@ local function rollReward(golden: boolean)
 	end
 	local ticket = rng:NextNumber() * totalWeight
 	local runningTotal = 0
-	for _, entry in pool do
+	for index, entry in pool do
 		runningTotal += entry.Weight
 		if ticket <= runningTotal then
-			return entry
+			return entry, index
 		end
 	end
-	return pool[1]
+	return pool[1], 1
 end
 
 -- ------------------------------------------------------------
@@ -178,13 +179,33 @@ local function spawnBlock()
 		end
 		claimed = true
 
-		local entry = rollReward(golden)
-		Rewards.grant(player, entry.Reward)
-		Remotes.Notify:FireClient(player, { Text = "🧧 " .. entry.Label, Kind = "Gold" })
-		Remotes.Notify:FireAllClients({
-			Text = player.DisplayName .. " opened the " .. (golden and "GOLDEN " or "") .. "Lucky Block! (" .. entry.Label .. ")",
-			Kind = "Quest",
+		-- PATCH 6: SPIN THE WHEEL. The server rolls the prize FIRST (right
+		-- here, authoritatively) — the client only animates a wheel that
+		-- lands on this predetermined slot. The client cannot change it.
+		local pool = golden and BLOCKS.GoldenRewards or BLOCKS.Rewards
+		local entry, prizeIndex = rollReward(golden)
+		local wheelEntries = {}
+		for _, poolEntry in pool do
+			-- Big = low-weight slots; the client uses this for near-miss
+			-- teases and the celebration size
+			table.insert(wheelEntries, { Label = poolEntry.Label, Big = poolEntry.Weight <= 15 })
+		end
+		Remotes.LuckyWheel:FireClient(player, {
+			Golden = golden,
+			PrizeIndex = prizeIndex,
+			Entries = wheelEntries,
 		})
+
+		-- Grant + public announce land WITH the wheel (cosmetic delay only —
+		-- the outcome was decided above and can't be lost by leaving early)
+		task.delay(GameConfig.LuckyWheel.SpinSeconds + 0.6, function()
+			Rewards.grant(player, entry.Reward)
+			Remotes.Notify:FireClient(player, { Text = "🧧 " .. entry.Label, Kind = "Gold" })
+			Remotes.Notify:FireAllClients({
+				Text = player.DisplayName .. " opened the " .. (golden and "GOLDEN " or "") .. "Lucky Block! (" .. entry.Label .. ")",
+				Kind = "Quest",
+			})
+		end)
 
 		-- Pop! burst then vanish
 		local burst = Instance.new("ParticleEmitter")

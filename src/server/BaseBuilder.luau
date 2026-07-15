@@ -296,6 +296,7 @@ export type BaseLook = {
 function BaseBuilder.build(parent: Instance, plotCFrame: CFrame, look: BaseLook, ownerName: string?, variantSeed: number?): (Model, { Vector3 })
 	local model = Instance.new("Model")
 	model.Name = "Base"
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic -- streams whole
 	local rng = Random.new(variantSeed or 0)
 
 	-- Cabin sits BEHIND the plot point (away from the village), pads in
